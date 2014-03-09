@@ -1,0 +1,133 @@
+@import "mixins";
+
+// --------------------------------------------
+// TIMELINE
+
+@zindexTime:      1000;
+
+@timeHeight:      45px;
+@timeRadius:      8px;
+@timeCapWidth:    30px;
+@timeTopGutter:   7px;
+@timeHandleWidth: 27px;
+@timeMargins:     0px;
+
+@timeBG:          @blue;
+@timeFG:          @white;
+@timeSelection:   darken(@timeBG,20%);
+@timeBorders:     1px solid darken(@timeBG,20%);
+@timeMarkBorder:  1px solid @timeFG;
+
+.timeline {
+  visibility: hidden;
+  position: absolute;
+  top: @timeMargins; left: @timeMargins;
+  width: 100%; height: @timeHeight;
+  z-index: @zindexTime;
+  color: @timeFG;
+  .user-select(none);
+  .clearfix;
+  .box {
+    position: relative;
+    border: @timeBorders;
+    #translucent > .background(@timeBG,0.9);
+    .border-radius(@timeRadius);
+    .box-shadow-out(2px,2px,2px);
+    .clearfix;
+    .container {
+      position: absolute;
+      left: @timeCapWidth + 1; top: 0px;
+      height: @timeHeight;
+      overflow-x: hidden;
+      //overflow-y: visible;
+    }
+  }
+  .timescale {
+    position: absolute;
+    left: 0px;
+    top: 0px;
+    height: @timeHeight;
+    z-index: @zindexTime + 2;
+    .inner {
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
+    .layer {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+    }
+    .label {
+      position: absolute;
+      bottom: 0px;
+      z-index: @zindexTime + 3;
+      border-left: @timeMarkBorder;
+      font-size: 13px;
+      line-height: 15px;
+      padding-left: 3px;
+      width: 45px;
+    }
+    .major {
+      position: absolute;
+      bottom: 0px;
+      z-index: @zindexTime + 2;
+      height: @timeHeight;
+      border-left: @timeMarkBorder;
+      .opacity(35);
+    }
+  }
+}
+.slider {
+  position: absolute;
+  top: -@timeTopGutter;
+  height: @timeHeight + @timeTopGutter * 3.5;
+  cursor: @handOpen,move;
+  &.drag {
+    cursor: @handClosed,move;
+    #selection {#translucent > .background(lighten(@timeBG,70%),0.25);}
+    .label {}
+  }
+  .top {
+    position: absolute;
+    left: -1px; top: 0px;
+    width: 100%;
+    height: @timeTopGutter - 2;
+    border: 1px solid darken(@timeSelection,10%);
+    #translucent > .background(@timeSelection,0.7);
+    .border-top-radius(@timeRadius);
+  }
+  .label {
+    position: absolute;
+    left: -1px; bottom: 0px;
+    width: 100%;
+    height: @timeTopGutter * 2.5 - 4;
+    z-index: @zindexTime + 5;
+    border: 1px solid darken(@timeSelection,10%);
+    #translucent > .background(@timeSelection,0.7);
+    .border-bottom-radius(@timeRadius);
+    padding-top: 2px;
+    font-size: 10px;
+    text-align: center;
+    .text-shadow(1px,1px,1px,rgba(0,0,0,0.5));
+    .box-shadow-out(2px,2px,2px);
+  }
+  .selection {
+    position: absolute;
+    left: -1px; top: @timeTopGutter;
+    width: 100%;
+    height: @timeHeight;
+    z-index: @zindexTime + 4;
+    border-left: 1px solid fade(@white,25%);
+    border-right: 1px solid fade(@black,25%);
+    #translucent > .background(lighten(@timeBG,60%),0.2);
+    .box-shadow(2px 0px 3px rgba(0,0,0,0.20));
+    span {
+      position: absolute;
+      left: 50%; top: 0px;
+      width: 0px;
+      height: @timeHeight;
+      border-left: 1px solid darken(@timeSelection,10%);
+    }
+  }
+}
