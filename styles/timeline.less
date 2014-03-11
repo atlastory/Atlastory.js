@@ -1,11 +1,10 @@
-@import "mixins";
 
 // --------------------------------------------
 // TIMELINE
 
 @zindexTime:      1000;
 
-@timeHeight:      45px;
+@timeHeight:      55px;
 @timeRadius:      8px;
 @timeCapWidth:    30px;
 @timeTopGutter:   7px;
@@ -22,70 +21,78 @@
   visibility: hidden;
   position: absolute;
   top: @timeMargins; left: @timeMargins;
-  width: 100%; height: @timeHeight;
+  width: 100%;
+  clear: both;
+  cursor: auto;
   z-index: @zindexTime;
   color: @timeFG;
   .user-select(none);
-  .clearfix;
+  //.clearfix;
+
   .box {
     position: relative;
-    border: @timeBorders;
+    height: @timeHeight;
+    border-bottom: @timeBorders;
     #translucent > .background(@timeBG,0.9);
-    .border-radius(@timeRadius);
-    .box-shadow-out(2px,2px,2px);
-    .clearfix;
+    .box-shadow-out(2px, 2px, 1px);
+    //.clearfix;
+
     .container {
       position: absolute;
-      left: @timeCapWidth + 1; top: 0px;
+      left: 0; top: 0;
       height: @timeHeight;
       overflow-x: hidden;
       //overflow-y: visible;
     }
   }
-  .timescale {
+}
+
+.timeline .timescale {
+  position: absolute;
+  left: 0px;
+  top: 0px;
+  height: @timeHeight;
+  z-index: @zindexTime + 2;
+  .inner {
+    position: relative;
+    width: 100%;
+    height: 100%;
+  }
+  .layer {
     position: absolute;
-    left: 0px;
-    top: 0px;
-    height: @timeHeight;
+    width: 100%;
+    height: 100%;
+  }
+  .label {
+    position: absolute;
+    bottom: 0px;
+    z-index: @zindexTime + 3;
+    border-left: @timeMarkBorder;
+    font-size: 13px;
+    line-height: 15px;
+    padding-left: 3px;
+    width: 45px;
+  }
+  .major {
+    position: absolute;
+    bottom: 0px;
     z-index: @zindexTime + 2;
-    .inner {
-      position: relative;
-      width: 100%;
-      height: 100%;
-    }
-    .layer {
-      position: absolute;
-      width: 100%;
-      height: 100%;
-    }
-    .label {
-      position: absolute;
-      bottom: 0px;
-      z-index: @zindexTime + 3;
-      border-left: @timeMarkBorder;
-      font-size: 13px;
-      line-height: 15px;
-      padding-left: 3px;
-      width: 45px;
-    }
-    .major {
-      position: absolute;
-      bottom: 0px;
-      z-index: @zindexTime + 2;
-      height: @timeHeight;
-      border-left: @timeMarkBorder;
-      .opacity(35);
-    }
+    height: @timeHeight;
+    border-left: @timeMarkBorder;
+    .opacity(35);
   }
 }
-.slider {
+
+.timeline .slider {
   position: absolute;
   top: -@timeTopGutter;
   height: @timeHeight + @timeTopGutter * 3.5;
-  cursor: @handOpen,move;
+  cursor: col-resize;
   &.drag {
-    cursor: @handClosed,move;
-    #selection {#translucent > .background(lighten(@timeBG,70%),0.25);}
+    .selection {
+      #translucent > .background(lighten(@timeBG,70%),0.25);
+      .box-shadow(2px 0px 6px rgba(0,0,0,0.4));
+    }
     .label {}
   }
   .top {
@@ -109,8 +116,8 @@
     padding-top: 2px;
     font-size: 10px;
     text-align: center;
-    .text-shadow(1px,1px,1px,rgba(0,0,0,0.5));
-    .box-shadow-out(2px,2px,2px);
+    .text-shadow(1px, 1px, 1px,rgba(0,0,0,0.5));
+    .box-shadow(2px 2px 4px rgba(0,0,0,0.4));
   }
   .selection {
     position: absolute;
@@ -121,7 +128,7 @@
     border-left: 1px solid fade(@white,25%);
     border-right: 1px solid fade(@black,25%);
     #translucent > .background(lighten(@timeBG,60%),0.2);
-    .box-shadow(2px 0px 3px rgba(0,0,0,0.20));
+    .box-shadow(2px 0px 3px rgba(0,0,0,0.4));
     span {
       position: absolute;
       left: 50%; top: 0px;

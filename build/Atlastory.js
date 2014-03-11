@@ -2,10 +2,389 @@
 require('./lib/leaflet');
 require('./lib/atlastory');
 
-},{"./lib/atlastory":4,"./lib/leaflet":5}],2:[function(require,module,exports){
+},{"./lib/atlastory":3,"./lib/leaflet":5}],2:[function(require,module,exports){
+// Adapted from Leaflet Events
+
+var Avents = {};
+var eventsKey = '_atlastory_events';
+
+// Mix events into the prototype
+
+Avents.apply = function(object) {
+    if (object.prototype) {
+        object.prototype = L.Util.extend(object.prototype, Avents.Events);
+    } else {
+        object = L.Util.extend(object, Avents.Events);
+    }
+};
+
+// Utilities
+
+Avents._stamp = (function () {
+    var lastId = 0, key = '_atlastory_events';
+    return function (/*Object*/ obj) {
+        obj[key] = obj[key] || ++lastId;
+        return obj[key];
+    };
+}());
+
+Avents._invoke = function (obj, method, context) {
+    var i, args;
+    if (typeof obj === 'object') {
+        args = Array.prototype.slice.call(arguments, 3);
+        for (i in obj) {
+            method.apply(context, [i, obj[i]].concat(args));
+        }
+        return true;
+    }
+    return false;
+};
+
+function falseFn() {
+    return false;
+}
+
+// Events
+
+Avents.Events = {
+
+    addEventListener: function (types, fn, context) { // (String, Function[, Object]) or (Object[, Object])
+
+        // types can be a map of types/handlers
+        if (Avents._invoke(types, this.addEventListener, this, fn, context)) { return this; }
+
+        var events = this[eventsKey] = this[eventsKey] || {},
+            contextId = context && Avents._stamp(context),
+            i, len, event, type, indexKey, indexLenKey, typeIndex;
+
+        // types can be a string of space-separated words
+        types = types.replace(/^\s+|\s+$/g,'').split(/\s+/);
+
+        for (i = 0, len = types.length; i < len; i++) {
+            event = {
+                action: fn,
+                context: context || this
+            };
+            type = types[i];
+
+            if (context) {
+                // store listeners of a particular context in a separate hash (if it has an id)
+                // gives a major performance boost when removing thousands of map layers
+
+                indexKey = type + '_idx',
+                indexLenKey = indexKey + '_len',
+
+                typeIndex = events[indexKey] = events[indexKey] || {};
+
+                if (!typeIndex[contextId]) {
+                    typeIndex[contextId] = [];
+
+                    // keep track of the number of keys in the index to quickly check if it's empty
+                    events[indexLenKey] = (events[indexLenKey] || 0) + 1;
+                }
+
+                typeIndex[contextId].push(event);
+
+
+            } else {
+                events[type] = events[type] || [];
+                events[type].push(event);
+            }
+        }
+
+        return this;
+    },
+
+    hasEventListeners: function (type) { // (String) -> Boolean
+        var events = this[eventsKey];
+        return !!events && ((type in events && events[type].length > 0) ||
+                            (type + '_idx' in events && events[type + '_idx_len'] > 0));
+    },
+
+    removeEventListener: function (types, fn, context) { // ([String, Function, Object]) or (Object[, Object])
+
+        if (!this[eventsKey]) {
+            return this;
+        }
+
+        if (!types) {
+            return this.clearAllEventListeners();
+        }
+
+        if (Avents._invoke(types, this.removeEventListener, this, fn, context)) { return this; }
+
+        var events = this[eventsKey],
+            contextId = context && Avents._stamp(context),
+            i, len, type, listeners, j, indexKey, indexLenKey, typeIndex, removed;
+
+        types = types.replace(/^\s+|\s+$/g,'').split(/\s+/);
+
+        for (i = 0, len = types.length; i < len; i++) {
+            type = types[i];
+            indexKey = type + '_idx';
+            indexLenKey = indexKey + '_len';
+
+            typeIndex = events[indexKey];
+
+            if (!fn) {
+                // clear all listeners for a type if function isn't specified
+                delete events[type];
+                delete events[indexKey];
+
+            } else {
+                listeners = context && typeIndex ? typeIndex[contextId] : events[type];
+
+                if (listeners) {
+                    for (j = listeners.length - 1; j >= 0; j--) {
+                        if ((listeners[j].action === fn) && (!context || (listeners[j].context === context))) {
+                            removed = listeners.splice(j, 1);
+                            // set the old action to a no-op, because it is possible
+                            // that the listener is being iterated over as part of a dispatch
+                            removed[0].action = falseFn;
+                        }
+                    }
+
+                    if (context && typeIndex && (listeners.length === 0)) {
+                        delete typeIndex[contextId];
+                        events[indexLenKey]--;
+                    }
+                }
+            }
+        }
+
+        return this;
+    },
+
+    clearAllEventListeners: function () {
+        delete this[eventsKey];
+        return this;
+    },
+
+    trigger: function (type, data) { // (String[, Object])
+        if (!this.hasEventListeners(type)) {
+            return this;
+        }
+
+        var event = L.Util.extend({}, data, { type: type, target: this });
+
+        var events = this[eventsKey],
+            listeners, i, len, typeIndex, contextId;
+
+        if (events[type]) {
+            // make sure adding/removing listeners inside other listeners won't cause infinite loop
+            listeners = events[type].slice();
+
+            for (i = 0, len = listeners.length; i < len; i++) {
+                listeners[i].action.call(listeners[i].context || this, event);
+            }
+        }
+
+        // fire event for the context-indexed listeners as well
+        typeIndex = events[type + '_idx'];
+
+        for (contextId in typeIndex) {
+            listeners = typeIndex[contextId];
+
+            if (listeners) {
+                for (i = 0, len = listeners.length; i < len; i++) {
+                    listeners[i].action.call(listeners[i].context || this, event);
+                }
+            }
+        }
+
+        return this;
+    },
+
+    addOneTimeEventListener: function (types, fn, context) {
+
+        if (Avents._invoke(types, this.addOneTimeEventListener, this, fn, context)) { return this; }
+
+        var handler = L.Util.bind(function () {
+            this
+                .removeEventListener(types, fn, context)
+                .removeEventListener(types, handler, context);
+        }, this);
+
+        return this
+            .addEventListener(types, fn, context)
+            .addEventListener(types, handler, context);
+    }
+};
+
+// Shortcuts
+Avents.Events.listen = Avents.Events.addEventListener;
+Avents.Events.on = Avents.Events.addEventListener;
+Avents.Events.off = Avents.Events.removeEventListener;
+Avents.Events.once = Avents.Events.addOneTimeEventListener;
+Avents.Events.fire = Avents.Events.trigger;
+
+module.exports = Avents;
+
+},{}],3:[function(require,module,exports){
+// Hardcode image path
+window.L.Icon.Default.imagePath = 'http://img.atlastory.com/Atlastory.js/v1';
+
+var Atlastory = window.Atlastory = module.exports = {
+    VERSION: require('../package.json').version,
+    //marker
+    //gridControl
+    //gridLayer
+    //featureLayer
+    map: require('./map'),
+    periodLayer: require('./period')
+};
+
+Atlastory.hash = L.hash;
+
+
+},{"../package.json":13,"./map":6,"./period":7}],4:[function(require,module,exports){
 (function($) {
 
-    var jQ = {};
+    // Gets mouse position for all browsers
+
+    var Mouse = {
+        x: 0,
+        y: 0,
+        init: function(c){
+            var posX, posY;
+            if (!c) c = window.event;
+            if (c.pageX||c.pageY){posX=c.pageX; posY=c.pageY;}
+            else if (c.clientX||c.clientY){
+                posX = c.clientX + document.body.scrollLeft + document.documentElement.scrollLeft;
+                posY = c.clientY + document.body.scrollTop + document.documentElement.scrollTop;}
+            Mouse.x = posX;
+            Mouse.y = posY;
+        }
+    };
+
+    $(function(){
+        $(window).bind("mousemove", Mouse.init);
+    });
+
+    // Prevents selection
+
+    $.fn.selectOff = function() {
+        return this.each(function(){
+            if ($.support.selectstart)
+                $(this).on("selectstart.selectOff", function(){ return false; });
+            else $(this).on("mousedown.selectOff", function(){ return false; });
+        });
+    };
+    $.fn.selectOn = function() {
+        return this.off(".selectOff");
+    };
+
+    // Drag element UI
+
+    $.fn.drag = function(options){
+        var o = $.extend({
+            constraint: false,
+            xbounds: false,
+            ybounds: false,
+            snap: [1,1],
+            onStart: function(){},
+            onDrag: function(){},
+            onStop: function(){},
+            dragClass: ""
+        }, options);
+        return this.each(function(){
+            $(this).data("drag", new DragObj($(this), o));
+        });
+    };
+    $.fn.dragUpdate = function(o){ return $(this).data("drag").update(o); };
+
+    function DragObj(el, o){
+
+        this.o = o;
+        var self = this, ui = {};
+
+        this.update = function(options){
+            $.extend(self.o, options);
+        };
+
+        function init(){
+            ui.pos = el.position();
+            el.css({
+                position: 'absolute',
+                top: ui.pos.top,
+                left: ui.pos.left
+            });
+            el.mousedown(setEvents);
+            return self;
+        }
+
+        function setEvents(e){
+            // Adds drag events
+            window.focus();
+            $(document)
+                .mousemove(mouseMove)
+                .mouseup(mouseUp)
+                .selectOff();
+
+            // Sets starting positions
+            ui.el = el;
+            ui.startX = Mouse.x;
+            ui.startY = Mouse.y;
+            ui.pos = el.position();
+            el.addClass(self.o.dragClass);
+            self.o.onStart(e,ui);
+            return false;
+        }
+
+        function mouseMove(e){
+            window.focus();
+            var movedX  = Mouse.x - ui.startX,
+                movedY  = Mouse.y - ui.startY,
+                parent  = el.parent();
+
+            movedX = Math.round(movedX/self.o.snap[0]) * self.o.snap[0];
+            movedY = Math.round(movedY/self.o.snap[1]) * self.o.snap[1];
+
+            if (self.o.constraint == "x") movedY = 0;
+            if (self.o.constraint == "y") movedX = 0;
+
+            var moveX = ui.pos.left + movedX,
+                moveY = ui.pos.top + movedY,
+                rightBound, bottomBound;
+
+            if (self.o.constraint=="container"){
+                rightBound  = parent.width() - el.outerWidth();
+                bottomBound = parent.height() - el.outerHeight();
+
+                if (moveX < 0) moveX = 0;
+                if (moveX > rightBound) moveX = rightBound;
+                if (moveY < 0) moveY = 0;
+                if (moveY > bottomBound) moveY = bottomBound;
+            }
+            if (self.o.xbounds) {
+                rightBound = self.o.xbounds[1] - el.outerWidth();
+                if (moveX < self.o.xbounds[0]) moveX = self.o.xbounds[0];
+                if (moveX > rightBound) moveX = rightBound;
+            }
+            if (self.o.ybounds) {
+                bottomBound = self.o.ybounds[1] - el.outerHeight();
+                if (moveY < self.o.ybounds[0]) moveY = self.o.ybounds[0];
+                if (moveY > bottomBound) moveY = bottomBound;
+            }
+
+            el.css({left: moveX, top: moveY});
+            ui.left = moveX;
+            ui.top = moveY;
+            ui.movedX = movedX;
+            ui.movedY = movedY;
+            if (movedX !== 0 || movedY !== 0) self.o.onDrag(e,ui);
+        }
+
+        function mouseUp(e){
+            $(document)
+                .off("mousemove",mouseMove)
+                .off("mouseup",mouseUp)
+                .selectOn();
+            el.removeClass(self.o.dragClass);
+            self.o.onStop(e,ui);
+        }
+        return init();
+    }
 
     /////////////////////////////
     // Old jQuery 1.7 Animate
@@ -16,6 +395,8 @@ require('./lib/atlastory');
     // Called through:
     // $._animate + $._stop
     /////////////////////////////
+
+    var jQ = {};
 
     var elemdisplay = {},
         iframe, iframeDoc,
@@ -558,239 +939,7 @@ require('./lib/atlastory');
 
 })(jQuery);
 
-},{}],3:[function(require,module,exports){
-// Adapted from Leaflet Events
-
-var AtlastoryEvents = {};
-var eventsKey = '_atlastory_events';
-
-// Mix events into the prototype
-AtlastoryEvents._applyEvents = function(object) {
-    if (object.prototype) {
-        object.prototype = L.Util.extend(object.prototype, AtlastoryEvents.Events);
-    } else {
-        object = L.Util.extend(object, AtlastoryEvents.Events);
-    }
-};
-
-// Utilities
-
-AtlastoryEvents._stamp = (function () {
-    var lastId = 0, key = '_atlastory_events';
-    return function (/*Object*/ obj) {
-        obj[key] = obj[key] || ++lastId;
-        return obj[key];
-    };
-}());
-
-AtlastoryEvents._invoke = function (obj, method, context) {
-    var i, args;
-    if (typeof obj === 'object') {
-        args = Array.prototype.slice.call(arguments, 3);
-        for (i in obj) {
-            method.apply(context, [i, obj[i]].concat(args));
-        }
-        return true;
-    }
-    return false;
-};
-
-function falseFn() {
-    return false;
-}
-
-AtlastoryEvents.Events = {
-
-    addEventListener: function (types, fn, context) { // (String, Function[, Object]) or (Object[, Object])
-
-        // types can be a map of types/handlers
-        if (AtlastoryEvents._invoke(types, this.addEventListener, this, fn, context)) { return this; }
-
-        var events = this[eventsKey] = this[eventsKey] || {},
-            contextId = context && AtlastoryEvents._stamp(context),
-            i, len, event, type, indexKey, indexLenKey, typeIndex;
-
-        // types can be a string of space-separated words
-        types = types.replace(/^\s+|\s+$/g,'').split(/\s+/);
-
-        for (i = 0, len = types.length; i < len; i++) {
-            event = {
-                action: fn,
-                context: context || this
-            };
-            type = types[i];
-
-            if (context) {
-                // store listeners of a particular context in a separate hash (if it has an id)
-                // gives a major performance boost when removing thousands of map layers
-
-                indexKey = type + '_idx',
-                indexLenKey = indexKey + '_len',
-
-                typeIndex = events[indexKey] = events[indexKey] || {};
-
-                if (!typeIndex[contextId]) {
-                    typeIndex[contextId] = [];
-
-                    // keep track of the number of keys in the index to quickly check if it's empty
-                    events[indexLenKey] = (events[indexLenKey] || 0) + 1;
-                }
-
-                typeIndex[contextId].push(event);
-
-
-            } else {
-                events[type] = events[type] || [];
-                events[type].push(event);
-            }
-        }
-
-        return this;
-    },
-
-    hasEventListeners: function (type) { // (String) -> Boolean
-        var events = this[eventsKey];
-        return !!events && ((type in events && events[type].length > 0) ||
-                            (type + '_idx' in events && events[type + '_idx_len'] > 0));
-    },
-
-    removeEventListener: function (types, fn, context) { // ([String, Function, Object]) or (Object[, Object])
-
-        if (!this[eventsKey]) {
-            return this;
-        }
-
-        if (!types) {
-            return this.clearAllEventListeners();
-        }
-
-        if (AtlastoryEvents._invoke(types, this.removeEventListener, this, fn, context)) { return this; }
-
-        var events = this[eventsKey],
-            contextId = context && AtlastoryEvents._stamp(context),
-            i, len, type, listeners, j, indexKey, indexLenKey, typeIndex, removed;
-
-        types = types.replace(/^\s+|\s+$/g,'').split(/\s+/);
-
-        for (i = 0, len = types.length; i < len; i++) {
-            type = types[i];
-            indexKey = type + '_idx';
-            indexLenKey = indexKey + '_len';
-
-            typeIndex = events[indexKey];
-
-            if (!fn) {
-                // clear all listeners for a type if function isn't specified
-                delete events[type];
-                delete events[indexKey];
-
-            } else {
-                listeners = context && typeIndex ? typeIndex[contextId] : events[type];
-
-                if (listeners) {
-                    for (j = listeners.length - 1; j >= 0; j--) {
-                        if ((listeners[j].action === fn) && (!context || (listeners[j].context === context))) {
-                            removed = listeners.splice(j, 1);
-                            // set the old action to a no-op, because it is possible
-                            // that the listener is being iterated over as part of a dispatch
-                            removed[0].action = falseFn;
-                        }
-                    }
-
-                    if (context && typeIndex && (listeners.length === 0)) {
-                        delete typeIndex[contextId];
-                        events[indexLenKey]--;
-                    }
-                }
-            }
-        }
-
-        return this;
-    },
-
-    clearAllEventListeners: function () {
-        delete this[eventsKey];
-        return this;
-    },
-
-    trigger: function (type, data) { // (String[, Object])
-        if (!this.hasEventListeners(type)) {
-            return this;
-        }
-
-        var event = L.Util.extend({}, data, { type: type, target: this });
-
-        var events = this[eventsKey],
-            listeners, i, len, typeIndex, contextId;
-
-        if (events[type]) {
-            // make sure adding/removing listeners inside other listeners won't cause infinite loop
-            listeners = events[type].slice();
-
-            for (i = 0, len = listeners.length; i < len; i++) {
-                listeners[i].action.call(listeners[i].context || this, event);
-            }
-        }
-
-        // fire event for the context-indexed listeners as well
-        typeIndex = events[type + '_idx'];
-
-        for (contextId in typeIndex) {
-            listeners = typeIndex[contextId];
-
-            if (listeners) {
-                for (i = 0, len = listeners.length; i < len; i++) {
-                    listeners[i].action.call(listeners[i].context || this, event);
-                }
-            }
-        }
-
-        return this;
-    },
-
-    addOneTimeEventListener: function (types, fn, context) {
-
-        if (AtlastoryEvents._invoke(types, this.addOneTimeEventListener, this, fn, context)) { return this; }
-
-        var handler = L.Util.bind(function () {
-            this
-                .removeEventListener(types, fn, context)
-                .removeEventListener(types, handler, context);
-        }, this);
-
-        return this
-            .addEventListener(types, fn, context)
-            .addEventListener(types, handler, context);
-    }
-};
-
-// Shortcuts
-AtlastoryEvents.Events.listen = AtlastoryEvents.Events.addEventListener;
-AtlastoryEvents.Events.on = AtlastoryEvents.Events.addEventListener;
-AtlastoryEvents.Events.off = AtlastoryEvents.Events.removeEventListener;
-AtlastoryEvents.Events.once = AtlastoryEvents.Events.addOneTimeEventListener;
-AtlastoryEvents.Events.fire = AtlastoryEvents.Events.trigger;
-
-module.exports = AtlastoryEvents;
-
-},{}],4:[function(require,module,exports){
-// Hardcode image path
-window.L.Icon.Default.imagePath = 'http://img.atlastory.com/Atlastory.js/v1';
-
-var Atlastory = window.Atlastory = module.exports = {
-    VERSION: require('../package.json').version,
-    //marker
-    //gridControl
-    //gridLayer
-    //featureLayer
-    map: require('./map'),
-    periodLayer: require('./period')
-};
-
-Atlastory.hash = L.hash;
-
-
-},{"../package.json":13,"./map":6,"./period":7}],5:[function(require,module,exports){
+},{}],5:[function(require,module,exports){
 window.L = require('leaflet/dist/leaflet-src');
 require('leaflet-hash/leaflet-hash');
 
@@ -801,7 +950,14 @@ var Map = L.Map;
 
 module.exports = function(id, time, options) {
 
-    var map = Atlastory.map = new Map(id, {
+    var mapEl = document.getElementById(id),
+        mapViewEl = document.createElement('div');
+
+    mapViewEl.setAttribute('id', 'mapView')
+    mapEl.className = 'atlastory-map';
+    mapEl.appendChild(mapViewEl);
+
+    var map = Atlastory.map = new Map('mapView', {
         zoom: 3,
         center: [20.72, -22.41],
         zoomControl: false,
@@ -810,7 +966,8 @@ module.exports = function(id, time, options) {
 
     new L.Control.Zoom({ position: 'bottomleft' }).addTo(map);
 
-    Atlastory.timeline = new Timeline(map, time);
+    Atlastory._container = mapEl;
+    Atlastory.timeline = new Timeline(time);
 
     return map;
 };
@@ -835,17 +992,22 @@ var Events = require('./Atlastory.Events');
 
 var Time = function(time) {
     this.date = (typeof time === 'number') ? time : 1940;
-    this.zoom = 3;
+    this.zoom = 2;
 };
 
-Events._applyEvents(Time);
+Events.apply(Time);
 
 var months = ["Jan.", "Feb.", "Mar.", "Apr.", "May", "Jun.", "Jul.", "Aug.", "Sep.", "Oct.", "Nov.", "Dec."];
 
 Time.prototype.set = function(date) {
     if (typeof date === 'string') this.date = this.translateDate(date);
-    if (typeof date == 'number') this.date = date;
+    else if (typeof date == 'number') this.date = date;
+    else if (date && date.date || date && date.zoom) {
+        if (date.date) this.date = date.date;
+        if (date.zoom) this.zoom = date.zoom;
+    }
     else console.error("Date must be a string or number.");
+
     this.trigger("change");
 };
 
@@ -872,11 +1034,11 @@ Time.prototype.monthString = function(decimal) {
 
 module.exports = Time;
 
-},{"./Atlastory.Events":3}],9:[function(require,module,exports){
+},{"./Atlastory.Events":2}],9:[function(require,module,exports){
 var Events = require('./Atlastory.Events'),
     Time = require('./time');
 
-require('./$.animate')
+require('./jQuery.plugins');
 
 var zoomLevels = {
     0: {scale: 100, interval: 90},
@@ -885,27 +1047,43 @@ var zoomLevels = {
     3: {scale: 1,   interval: 60}
 };
 
-var Timeline = function(map, time) {
-    this._map = map;
+var Timeline = function(time) {
+    this._zoom = 0;
+    this._interval = 0;
+    this._visibleMarks = 0;
+    this._startYear = 0;
+    this._sliderPos = 0;
+    this._map = Atlastory.map;
+    this._container = Atlastory._container;
+
     Atlastory.time = new Time(time);
 
-    if (map._container) this._container = map._controlContainer;
-    else if (map.tagName == "DIV") this._container = map;
-    else if (typeof map === 'string') this._container = $('#'+map)[0];
-    else console.error("Timeline map not found.");
-
-    Atlastory.time.on("change", this.create, this);
+    // Trigger update whenever date is updated externally
     this.on("change", this.change, this);
+    Atlastory.time.on("change", this.create, this);
+    this._map.on("resize", this.resize, this);
 
     this.initialize();
 };
 
-Events._applyEvents(Timeline);
+Events.apply(Timeline);
 
 Timeline.prototype.initialize = function() {
+    var self = this;
+
     this.$timeline = $('<div class="timeline"/>');
     this.$timeline.appendTo(this._container);
     this.buildDOM();
+
+    // UI interaction events
+    this.$scale.dblclick(this.moveToDate.bind(this));
+    this.$slider.drag({
+        constraint: "x",
+        xbounds: [0, 1000],
+        dragClass: "drag",
+        onStop: self.stop.bind(this),
+        onDrag: self.drag.bind(this)
+    });
 
     this.create();
     this.$timeline.css("visibility", "visible");
@@ -931,17 +1109,237 @@ Timeline.prototype.buildDOM = function() {
     this.$container = $('.timeline .container');
     this.$scale = $('.timeline .timescale');
     this.$slider = $('.timeline .slider');
-
-    this.$scale.dblclick(this.moveToDate);
 };
 
-Timeline.prototype.create = function() {
-    console.log("create");
+// Updates timeline based on external change in data
+Timeline.prototype.create = function(mode) {
+    var zoomLvl  = Atlastory.time.zoom,
+        date     = Atlastory.time.date,
+        winWidth = $(this._container).width(),
+        lastIntv = this._interval,
+        intv, left;
+
+    this._zoom = zoomLvl;
+    intv = this._interval = zoomLevels[zoomLvl].interval;
+    this._visibleMarks = Math.ceil(winWidth / intv);
+
+    this.$slider.width(intv);
+
+    if (mode == 'zoom') {
+        left = this.$slider.position().left - (intv - lastIntv)/2;
+        if (left < 0) left = 0;
+        this.resize({ slide: left });
+    } else if (this._isInFuture()) {
+console.log("future!");
+        left = this.$slider.position().left;
+        this.resize({ slide: left });
+    } else {
+        this.resize();
+    }
+};
+
+// Renders timeline based on slider, zoom, dates
+Timeline.prototype.render = function(slideX, date, fx) {
+    var $scale = this.$scale,
+        intv = this._interval,
+        visM = this._visibleMarks,
+        marks = visM * 5,
+        z = zoomLevels[this._zoom].scale,
+        dateStart, yearMark, startYear, sliderPos, newLeft;
+
+    date = date || Atlastory.time.date;
+    dateStart = date - z / 2;
+    yearMark = Math.round(dateStart / z) * z;
+    startYear = yearMark - visM * z * 2;
+
+    this._startYear = startYear;
+    $scale.width(visM * intv * 5);
+
+    // Creates timeline visuals
+    var $labels = $('<div class="layer"/>'),
+        $major  = $('<div class="layer"/>');
+    for (var i=0; i<marks; i++) {
+        var year = startYear + i * z;
+        if (year < new Date().getFullYear()) {
+            $('<div class="label"/>').css("left", intv*i)
+                .html(year === 0 ? "0" : year).appendTo($labels);
+            $('<div class="major"/>').css("left", intv*i).appendTo($major);
+        }
+    }
+    $(".inner", $scale).empty().append($labels, $major);
+
+    // Moves scale to current position
+    sliderPos = slideX || this.$slider.position().left;
+    newLeft = -(dateStart - startYear)/z * intv + sliderPos;
+    this._sliderPos = sliderPos;
+    $scale.css("left", newLeft);
+
+    // Make sure timeline stops at current year
+    if (this._isInFuture()) {
+        newLeft = -(this._yearInPx() - this.$timeline.width());
+        $scale.css("left", newLeft);
+        this.$slider.css("left", this._yearInPx(date) + newLeft - intv/2);
+    }
+
+    // Feeds back new numbers for jQuery animate
+    if (fx) {
+        var adjust  = newLeft - fx.now;
+        fx.now = newLeft;
+        fx.start = fx.start + adjust;
+        fx.end = fx.end + adjust;
+    }
+
+    var selectMonth = this._zoom >= 3 ? Atlastory.time.monthString(date) + " " : "";
+    $(".label", this.$slider).html(selectMonth + Math.floor(date));
+};
+
+Timeline.prototype._yearInPx = function(year) {
+    year = year || new Date().getFullYear();
+    return (year - this._startYear) /
+        zoomLevels[this._zoom].scale * this._interval;
+};
+
+Timeline.prototype._isInFuture = function() {
+    var fromLeft = this._yearInPx() + this.$scale.position().left;
+    return (fromLeft <= this.$timeline.outerWidth());
+};
+
+// Updates date range data whenever timeline is changed:
+Timeline.prototype.change = function() {
+    var $scale = this.$scale,
+        $slider = this.$slider,
+        intv = this._interval,
+        z = zoomLevels[this._zoom].scale,
+        startYear = this._startYear,
+        slideX = $slider.position().left - $scale.position().left,
+        date = ((slideX + $slider.width()/2) / intv) * z + startYear;
+
+    var selectMonth = this._zoom >= 3 ? Atlastory.time.monthString(date) + " " : "";
+    $(".label", $slider).html(selectMonth + Math.floor(date));
+
+    Atlastory.time.date = date;
+    Atlastory.time.zoom = this._zoom;
+};
+
+// Shifts the timescale when slider is dragged
+Timeline.prototype.drag = function(e, ui) {
+    this.trigger("change");
+
+    var width = this.$timeline.outerWidth(),
+        slWidth = this.$slider.width(),
+        left = ui.left,
+        right = slWidth + left,
+        z = zoomLevels[this._zoom].scale,
+        self = this;
+
+    // Stops the animation if user reverses slider direction
+    if (left < 0.5 * width && this._sliderPos <= left ||
+        left > 0.5 * width && this._sliderPos >= left) {
+        this.$scale._stop().clearQueue();
+        this._sliderPos = left;
+        return false;
+    }
+    this._sliderPos = (left < 0.5 * width) ? left + 3 : left - 3;
+
+    // Stops animation if timeline ends
+    if (this._isInFuture() && this._sliderPos <= left) {
+        this.$scale._stop().clearQueue();
+        this._sliderPos = left;
+        return false;
+    }
+
+    // Decides how fast animation should be
+    var startTime   = 3000,
+        endTime     = 800,
+        bounds      = 0.2,
+        timeDelta   = startTime - endTime,
+        totalDur    = timeDelta/bounds,
+        leftTime    = totalDur*(left/width) + endTime,
+        rightTime   = totalDur - totalDur*(right/width) + endTime;
+
+    // Timeline left/right animation
+    if (leftTime < startTime)
+        this.$scale._animate({ left:'+=500' }, {
+            duration: leftTime, easing: "linear", step: reRender.bind(this)
+        });
+    if (rightTime < startTime)
+        this.$scale._animate({ left:'-=500' }, {
+            duration: rightTime, easing: "linear", step: reRender.bind(this)
+        });
+
+    // Checks if user is near timescale boundaries, re-renders if so:
+    function reRender(now, fx) {
+        var reloadBuff = this._visibleMarks/2,
+            intv    = this._interval,
+            scLeft      = now,
+            scRight     = this.$scale.width() + scLeft - this.$container.width(),
+            left        = ui.left,
+            right       = slWidth + left,
+            date        = ((left-scLeft+slWidth/2)/intv)*z + this._startYear,
+            leftTime    = totalDur*(left/width) + endTime,
+            rightTime   = totalDur - totalDur*(right/width) + endTime;
+
+        if (this._isInFuture()) this.stop();
+
+        if (left < 0.5 * width) fx.options.duration = leftTime;
+                           else fx.options.duration = rightTime;
+
+        if (scLeft > (-intv * reloadBuff) || scRight < (intv * reloadBuff))
+            this.render(left, date, fx);
+    }
+};
+
+Timeline.prototype.stop = function(e,ui){
+    this.$scale.clearQueue()._stop();
+    this.trigger("change");
+};
+
+Timeline.prototype.moveToDate = function(e){
+    var left    = e.clientX - this.$timeline.position().left,
+        width   = this.$slider.width(),
+        newPos  = left - width/2,
+        self    = this;
+
+    this.$slider.animate({ left: newPos }, 400, "swing", function(){
+        self.trigger("change");
+    });
+};
+
+Timeline.prototype.zoomIn = function(e, z) {
+    if (isNaN(z)) z = 1;
+    var lvl = this._zoom + z;
+    if (!zoomLevels[lvl]) return true;
+    Atlastory.time.set({ zoom: lvl });
+    this._zoom = lvl;
+    this.create("zoom");
+};
+
+Timeline.prototype.zoomOut = function(e, z){
+    if (isNaN(z)) z = -1;
+    var lvl = this._zoom + z;
+    if (!zoomLevels[lvl]) return true;
+    Atlastory.time.set({ zoom: lvl });
+    this._zoom = lvl;
+    this.create("zoom");
+};
+
+Timeline.prototype.resize = function(data) {
+    var width, slideX;
+
+    width = (data && data.newSize) ? data.newSize.x : $(this._container).width();
+    slideX = (data && data.slide) ? data.slide : width/2 - this._interval/2; // Centers slider
+
+    this.$container.width(width);
+    this.$scale.width(this._visibleMarks * this._interval * 5);
+    this.$slider.css('left', slideX);
+
+    this.trigger("resize");
+    this.render();
 };
 
 module.exports = Timeline;
 
-},{"./$.animate":2,"./Atlastory.Events":3,"./time":8}],10:[function(require,module,exports){
+},{"./Atlastory.Events":2,"./jQuery.plugins":4,"./time":8}],10:[function(require,module,exports){
 module.exports = {
     base: "http://{s}.tiles.mapbox.com/v3",
     name: "/atlastory.map-6k2hhm7v",

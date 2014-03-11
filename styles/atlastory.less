@@ -1,3 +1,15 @@
-
+@import "mixins";
 @import (less) "../node_modules/leaflet/dist/leaflet.css";
 @import "timeline";
+
+.atlastory-map {
+  background: @grayLighter;
+  font-family: @sansFontFamily;
+  font-size: @baseFontSize;
+  overflow: hidden;
+}
+
+#mapView {
+  width: 100%;
+  height: 100%;
+}
