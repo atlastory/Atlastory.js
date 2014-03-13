@@ -11,13 +11,15 @@
 @timeHandleWidth: 27px;
 @timeMargins:     0px;
 
-@timeBG:          @blue;
-@timeFG:          @white;
-@timeSelection:   darken(@timeBG,20%);
-@timeBorders:     1px solid darken(@timeBG,20%);
-@timeMarkBorder:  1px solid @timeFG;
+@time-bg:         @grayDarker;
+@time-color:      @grayLighter;
+@time-opacity:    75%;
+@time-select:     darken(@time-bg, 20%);
+@timeBorders:     1px solid darken(@time-bg, 20%);
+@timeMarkBorder:  1px solid @time-color;
+@time-marker:     1px solid @time-select;
 
-@ribbon-color:    @purple;
+@ribbon-color:    @blue;
 @ribbon-height:   10px;
 @ribbon-top:      7px;
 
@@ -29,14 +31,14 @@
   clear: both;
   cursor: auto;
   z-index: @zindexTime;
-  color: @timeFG;
+  color: @time-color;
   .user-select(none);
 
   .box {
     position: relative;
     height: @timeHeight;
     border-bottom: @timeBorders;
-    #translucent > .background(@timeBG,0.9);
+    #translucent > .background(@time-bg, @time-opacity);
     //.box-shadow-out(2px, 2px, 1px);
 
     .container {
@@ -89,9 +91,7 @@
     top: @ribbon-top;
     height: @ribbon-height;
     box-sizing: border-box;
-    #translucent > .background(@ribbon-color, 0.8);
-    //background: @ribbon-color;
-    border: 1px solid darken(@ribbon-color, 15%);
+    &.blue { background-color: fade(@ribbon-color, 20%); }
   }
 }
 
@@ -102,7 +102,7 @@
   cursor: col-resize;
   &.drag {
     .selection {
-      #translucent > .background(lighten(@timeBG,70%),0.25);
+      #translucent > .background(@white, 30%);
       .box-shadow(2px 0px 6px rgba(0,0,0,0.4));
     }
     .label {}
@@ -112,8 +112,8 @@
     left: -1px; top: 0px;
     width: 100%;
     height: @timeTopGutter - 2;
-    border: 1px solid darken(@timeSelection,10%);
-    #translucent > .background(@timeSelection,0.7);
+    border: 1px solid darken(@time-select,10%);
+    #translucent > .background(@time-select,0.7);
     .border-top-radius(@timeRadius);
   }
   .label {
@@ -122,8 +122,8 @@
     width: 100%;
     height: @timeTopGutter * 2.5 - 4;
     z-index: @zindexTime + 5;
-    border: 1px solid darken(@timeSelection,10%);
-    #translucent > .background(@timeSelection,0.7);
+    border: 1px solid darken(@time-select,10%);
+    #translucent > .background(@time-select,0.7);
     .border-bottom-radius(@timeRadius);
     padding-top: 2px;
     font-size: 10px;
@@ -137,16 +137,27 @@
     width: 100%;
     height: @timeHeight;
     z-index: @zindexTime + 4;
-    border-left: 1px solid fade(@white,25%);
-    border-right: 1px solid fade(@black,25%);
-    #translucent > .background(lighten(@timeBG,60%),0.2);
+    border-left: 1px solid fade(@white, 25%);
+    border-right: 1px solid fade(@black, 25%);
+    #translucent > .background(@white, 20%);
     .box-shadow(2px 0px 3px rgba(0,0,0,0.4));
     span {
       position: absolute;
       left: 50%; top: 0px;
       width: 0px;
       height: @timeHeight;
-      border-left: 1px solid darken(@timeSelection,10%);
+      border-left: @time-marker;
     }
   }
 }
+
+.atlastory-accent(@color, @fade: 45%) {
+  background-color: fade(@color, @fade);
+  border: 1px solid fade(lighten(@color, 20%), @fade);
+}
+
+.atlastory-magenta { .atlastory-accent(@atlastory-magenta); }
+.atlastory-orange { .atlastory-accent(@atlastory-orange); }
+.atlastory-yellow { .atlastory-accent(@atlastory-yellow); }
+.atlastory-lime { .atlastory-accent(@atlastory-lime); }
+.atlastory-green { .atlastory-accent(@atlastory-green); }

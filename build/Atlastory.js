@@ -961,7 +961,7 @@ var Map = L.Map;
 TimelinePeriods(Timeline.prototype);
 
 module.exports = function(id, time, options) {
-    var mapEl, mapViewEl, preload, timezoom;
+    var mapEl, mapViewEl;
 
     mapEl = document.getElementById(id);
     mapViewEl = document.createElement('div');
@@ -970,9 +970,12 @@ module.exports = function(id, time, options) {
     mapEl.className = 'atlastory-map';
     mapEl.appendChild(mapViewEl);
 
-    options = options || {};
-    preload = (typeof options.preload === 'boolean') ? options.preload : false;
-    timezoom = options.timezoom || 2;
+    // Set default options
+    var o = L.Util.extend({
+        preload: false,
+        timezoom: 2,
+        rainbow: true
+    }, options);
 
     var map = Atlastory.map = new Map('mapView', {
         zoom: 3,
@@ -988,11 +991,11 @@ module.exports = function(id, time, options) {
         reuseTiles: true
     });
     Atlastory.layers = new L.LayerGroup().addTo(map);
-    if (preload) Atlastory.layers.addLayer(Atlastory._blankLayer);
+    if (o.preload) Atlastory.layers.addLayer(Atlastory._blankLayer);
 
     Atlastory._container = mapEl;
-    Atlastory._options = options;
-    Atlastory.timeline = new Timeline(time, timezoom);
+    Atlastory._options = o;
+    Atlastory.timeline = new Timeline(time, o.timezoom);
 
     return map;
 };
@@ -1464,7 +1467,21 @@ fn.initPeriods = function(timeline) {
 };
 
 fn.renderPeriods = function() {
-    var per, p, left, right;
+    var per, p, left, right, lastColor;
+
+    lastColor = 0;
+
+    function pickColor() {
+        var colors = [
+            "atlastory-magenta",
+            "atlastory-orange",
+            "atlastory-yellow",
+            "atlastory-lime",
+            "atlastory-green"
+        ];
+        if (lastColor == colors.length - 1) lastColor = 0;
+        return colors[lastColor++];
+    }
 
     // Creates period ribbons on timeline
     var $ribbons = $('<div class="layer"/>');
@@ -1472,8 +1489,10 @@ fn.renderPeriods = function() {
         per = Period.periods[p];
         left = this._yearInPx(Period._dateToYear(per.start()));
         right = this._yearInPx(Period._dateToYear(per.end()));
-        $('<div class="ribbon"/>').css("left", left).width(right - left)
-            .appendTo($ribbons);
+        $('<div class="ribbon"/>').css("left", left)
+            .toggleClass("blue", !Atlastory._options.rainbow)
+            .toggleClass(pickColor(), Atlastory._options.rainbow)
+            .width(right - left).appendTo($ribbons);
     }
 
     this.$periods.empty().append($ribbons);

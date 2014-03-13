@@ -24,14 +24,15 @@
     <script type="text/javascript" src="../build/Atlastory.js"></script>
     <script type="text/javascript">
         var periods = [
-            { id: 1, start_year: 1950, end_year: 2000 },
+            { id: 3, start_year: 1890, end_year: 1900 },
             { id: 2, start_year: 1910, end_year: 1950 },
-            { id: 3, start_year: 1890, end_year: 1900 }
+            { id: 1, start_year: 1950, end_year: 2000 }
         ];
 
         var map = Atlastory.map('map', 1956, {
             preload: false,
-            timezoom: 3
+            timezoom: 3,
+            rainbow: true
         });
 
         for (var p in periods) {
