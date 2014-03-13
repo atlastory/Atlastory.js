@@ -224,20 +224,28 @@ module.exports = Avents;
 // Hardcode image path
 window.L.Icon.Default.imagePath = 'http://img.atlastory.com/Atlastory.js/v1';
 
-var Atlastory = window.Atlastory = module.exports = {
-    VERSION: require('../package.json').version,
-    //marker
-    //gridControl
-    //gridLayer
-    //featureLayer
-    map: require('./map'),
-    periodLayer: require('./period')
-};
+var Atlastory = {},
+    Period = require('./period'),
+    Events = require('./Atlastory.Events');
+
+Events.apply(Atlastory);
+
+Atlastory.VERSION = require('../package.json').version;
+Atlastory.map = require('./map');
+
+Atlastory.periodLayer = Period.periodLayer;
+Atlastory.addPeriod = Period.addPeriod;
 
 Atlastory.hash = L.hash;
 
+//marker
+//gridControl
+//gridLayer
+//featureLayer
 
-},{"../package.json":13,"./map":6,"./period":7}],4:[function(require,module,exports){
+window.Atlastory = module.exports = Atlastory;
+
+},{"../package.json":14,"./Atlastory.Events":2,"./map":6,"./period":7}],4:[function(require,module,exports){
 (function($) {
 
     // Gets mouse position for all browsers
@@ -943,7 +951,7 @@ Atlastory.hash = L.hash;
 window.L = require('leaflet/dist/leaflet-src');
 require('leaflet-hash/leaflet-hash');
 
-},{"leaflet-hash/leaflet-hash":11,"leaflet/dist/leaflet-src":12}],6:[function(require,module,exports){
+},{"leaflet-hash/leaflet-hash":12,"leaflet/dist/leaflet-src":13}],6:[function(require,module,exports){
 var Timeline = require('./timeline');
 
 var Map = L.Map;
@@ -953,7 +961,7 @@ module.exports = function(id, time, options) {
     var mapEl = document.getElementById(id),
         mapViewEl = document.createElement('div');
 
-    mapViewEl.setAttribute('id', 'mapView')
+    mapViewEl.setAttribute('id', 'mapView');
     mapEl.className = 'atlastory-map';
     mapEl.appendChild(mapViewEl);
 
@@ -977,7 +985,31 @@ var url = require('./url');
 
 var PeriodLayer = L.TileLayer;
 
-module.exports = function(period, options) {
+exports.periods = [];
+
+var Period = function(data) {
+    this.id = data.id;
+    this.start_year = data.start_year;
+    this.start_month = data.start_month;
+    this.start_day = data.start_day;
+    this.end_year = data.end_year;
+    this.end_month = data.end_month;
+    this.end_day = data.end_day;
+};
+
+Period.prototype.start = function() {
+    return this.start_year + '-' +
+           this.start_month + '-' +
+           this.start_day;
+};
+
+Period.prototype.end = function() {
+    return this.end_year + '-' +
+           this.end_month + '-' +
+           this.end_day;
+};
+
+exports.periodLayer = function(period, options) {
     var map = url.url();
     return new PeriodLayer(map, {
         p: period,
@@ -987,7 +1019,18 @@ module.exports = function(period, options) {
     });
 };
 
-},{"./url":10}],8:[function(require,module,exports){
+exports.addPeriod = function(period) {
+    if (!period.id || isNaN(parseFloat(period.id)))
+        return console.error("Atlastory#addPeriod: Period is missing an ID number.");
+    if (!period.start_year || !period.end_year)
+        return console.error("Atlastory#addPeriod: Period is missing start or end year.");
+
+    period = new Period(period);
+    exports.periods.push(period);
+    Atlastory.trigger("period:add", { period: period });
+};
+
+},{"./url":11}],8:[function(require,module,exports){
 var Events = require('./Atlastory.Events');
 
 var Time = function(time) {
@@ -1036,7 +1079,8 @@ module.exports = Time;
 
 },{"./Atlastory.Events":2}],9:[function(require,module,exports){
 var Events = require('./Atlastory.Events'),
-    Time = require('./time');
+    Time = require('./time'),
+    TimelinePeriods = require('./timeline.periods');
 
 require('./jQuery.plugins');
 
@@ -1048,6 +1092,7 @@ var zoomLevels = {
 };
 
 var Timeline = function(time) {
+
     this._zoom = 0;
     this._interval = 0;
     this._visibleMarks = 0;
@@ -1064,11 +1109,15 @@ var Timeline = function(time) {
     this._map.on("resize", this.resize, this);
 
     this.initialize();
+    this.initPeriods();
 };
 
+var fn = Timeline.prototype;
+
+TimelinePeriods(fn);
 Events.apply(Timeline);
 
-Timeline.prototype.initialize = function() {
+fn.initialize = function() {
     var self = this;
 
     this.$timeline = $('<div class="timeline"/>');
@@ -1089,7 +1138,7 @@ Timeline.prototype.initialize = function() {
     this.$timeline.css("visibility", "visible");
 };
 
-Timeline.prototype.buildDOM = function() {
+fn.buildDOM = function() {
     var $tl = this.$timeline;
 
     $tl.empty();
@@ -1112,7 +1161,7 @@ Timeline.prototype.buildDOM = function() {
 };
 
 // Updates timeline based on external change in data
-Timeline.prototype.create = function(mode) {
+fn.create = function(mode) {
     var zoomLvl  = Atlastory.time.zoom,
         date     = Atlastory.time.date,
         winWidth = $(this._container).width(),
@@ -1139,7 +1188,7 @@ console.log("future!");
 };
 
 // Renders timeline based on slider, zoom, dates
-Timeline.prototype.render = function(slideX, date, fx) {
+fn.render = function(slideX, date, fx) {
     var $scale = this.$scale,
         intv = this._interval,
         visM = this._visibleMarks,
@@ -1193,19 +1242,19 @@ Timeline.prototype.render = function(slideX, date, fx) {
     $(".label", this.$slider).html(selectMonth + Math.floor(date));
 };
 
-Timeline.prototype._yearInPx = function(year) {
+fn._yearInPx = function(year) {
     year = year || new Date().getFullYear();
     return (year - this._startYear) /
         zoomLevels[this._zoom].scale * this._interval;
 };
 
-Timeline.prototype._isInFuture = function() {
+fn._isInFuture = function() {
     var fromLeft = this._yearInPx() + this.$scale.position().left;
     return (fromLeft <= this.$timeline.outerWidth());
 };
 
 // Updates date range data whenever timeline is changed:
-Timeline.prototype.change = function() {
+fn.change = function() {
     var $scale = this.$scale,
         $slider = this.$slider,
         intv = this._interval,
@@ -1222,7 +1271,7 @@ Timeline.prototype.change = function() {
 };
 
 // Shifts the timescale when slider is dragged
-Timeline.prototype.drag = function(e, ui) {
+fn.drag = function(e, ui) {
     this.trigger("change");
 
     var width = this.$timeline.outerWidth(),
@@ -1289,12 +1338,12 @@ Timeline.prototype.drag = function(e, ui) {
     }
 };
 
-Timeline.prototype.stop = function(e,ui){
+fn.stop = function(e,ui){
     this.$scale.clearQueue()._stop();
     this.trigger("change");
 };
 
-Timeline.prototype.moveToDate = function(e){
+fn.moveToDate = function(e){
     var left    = e.clientX - this.$timeline.position().left,
         width   = this.$slider.width(),
         newPos  = left - width/2,
@@ -1305,7 +1354,7 @@ Timeline.prototype.moveToDate = function(e){
     });
 };
 
-Timeline.prototype.zoomIn = function(e, z) {
+fn.zoomIn = function(e, z) {
     if (isNaN(z)) z = 1;
     var lvl = this._zoom + z;
     if (!zoomLevels[lvl]) return true;
@@ -1314,7 +1363,7 @@ Timeline.prototype.zoomIn = function(e, z) {
     this.create("zoom");
 };
 
-Timeline.prototype.zoomOut = function(e, z){
+fn.zoomOut = function(e, z){
     if (isNaN(z)) z = -1;
     var lvl = this._zoom + z;
     if (!zoomLevels[lvl]) return true;
@@ -1323,7 +1372,7 @@ Timeline.prototype.zoomOut = function(e, z){
     this.create("zoom");
 };
 
-Timeline.prototype.resize = function(data) {
+fn.resize = function(data) {
     var width, slideX;
 
     width = (data && data.newSize) ? data.newSize.x : $(this._container).width();
@@ -1339,7 +1388,22 @@ Timeline.prototype.resize = function(data) {
 
 module.exports = Timeline;
 
-},{"./Atlastory.Events":2,"./jQuery.plugins":4,"./time":8}],10:[function(require,module,exports){
+},{"./Atlastory.Events":2,"./jQuery.plugins":4,"./time":8,"./timeline.periods":10}],10:[function(require,module,exports){
+var Period = require('./period');
+
+module.exports = function(fn) {
+
+fn.initPeriods = function(timeline) {
+    Atlastory.on("period:add", this.addPeriod, this);
+};
+
+fn.addPeriod = function() {
+    console.log("period added!!");
+};
+
+};
+
+},{"./period":7}],11:[function(require,module,exports){
 module.exports = {
     base: "http://{s}.tiles.mapbox.com/v3",
     name: "/atlastory.map-6k2hhm7v",
@@ -1353,7 +1417,7 @@ module.exports = {
     }
 };
 
-},{}],11:[function(require,module,exports){
+},{}],12:[function(require,module,exports){
 (function(window) {
 	var HAS_HASHCHANGE = (function() {
 		var doc_mode = window.documentMode;
@@ -1517,7 +1581,7 @@ module.exports = {
 	};
 })(window);
 
-},{}],12:[function(require,module,exports){
+},{}],13:[function(require,module,exports){
 /*
  Leaflet, a JavaScript library for mobile-friendly interactive maps. http://leafletjs.com
  (c) 2010-2013, Vladimir Agafonkin
@@ -10687,7 +10751,7 @@ L.Map.include({
 
 
 }(window, document));
-},{}],13:[function(require,module,exports){
+},{}],14:[function(require,module,exports){
 module.exports={
   "name": "Atlastory.js",
   "version": "0.0.1",

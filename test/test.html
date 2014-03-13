@@ -23,9 +23,16 @@
     <script src="http://ajax.googleapis.com/ajax/libs/jquery/2.1.0/jquery.min.js"></script>
     <script type="text/javascript" src="../build/Atlastory.js"></script>
     <script type="text/javascript">
+        var periods = [
+            { id: 1, start_year: 1950, end_year: 2000 },
+            { id: 2, start_year: 1910, end_year: 1940 }
+        ];
+
         var map = Atlastory.map('map', 1956);
 
-        Atlastory.periodLayer(1).addTo(map);
+        for (var p in periods) {
+            Atlastory.addPeriod(periods[p]);
+        }
 
         Atlastory.hash(map);
     </script>
