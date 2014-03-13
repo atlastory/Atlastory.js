@@ -952,9 +952,13 @@ window.L = require('leaflet/dist/leaflet-src');
 require('leaflet-hash/leaflet-hash');
 
 },{"leaflet-hash/leaflet-hash":12,"leaflet/dist/leaflet-src":13}],6:[function(require,module,exports){
-var Timeline = require('./timeline');
+var Timeline = require('./timeline'),
+    TimelinePeriods = require('./timeline.periods'),
+    url = require('./url');
 
 var Map = L.Map;
+
+TimelinePeriods(Timeline.prototype);
 
 module.exports = function(id, time, options) {
 
@@ -974,27 +978,39 @@ module.exports = function(id, time, options) {
 
     new L.Control.Zoom({ position: 'bottomleft' }).addTo(map);
 
+    Atlastory._blankLayer = new L.TileLayer(url.blankmap, {
+        maxZoom: 9,
+        reuseTiles: true
+    });
+    Atlastory.layers = new L.LayerGroup().addTo(map);
     Atlastory._container = mapEl;
+
     Atlastory.timeline = new Timeline(time);
 
     return map;
 };
 
-},{"./timeline":9}],7:[function(require,module,exports){
-var url = require('./url');
+},{"./timeline":9,"./timeline.periods":10,"./url":11}],7:[function(require,module,exports){
+var url = require('./url'),
+    Time = require('./time');
 
 var PeriodLayer = L.TileLayer;
+var time = new Time();
 
 exports.periods = [];
 
-var Period = function(data) {
+var Period = function(data, preload) {
     this.id = data.id;
     this.start_year = data.start_year;
-    this.start_month = data.start_month;
-    this.start_day = data.start_day;
+    this.start_month = data.start_month || 1;
+    this.start_day = data.start_day || 1;
     this.end_year = data.end_year;
-    this.end_month = data.end_month;
-    this.end_day = data.end_day;
+    this.end_month = data.end_month || 1;
+    this.end_day = data.end_day || 1;
+    this._preload = preload;
+
+    this.mapLayer = exports.periodLayer(this.id);
+    if (preload) Atlastory.layers.addLayer(this.mapLayer);
 };
 
 Period.prototype.start = function() {
@@ -1019,18 +1035,46 @@ exports.periodLayer = function(period, options) {
     });
 };
 
-exports.addPeriod = function(period) {
+exports.addPeriod = function(period, options) {
+    var preload;
+
     if (!period.id || isNaN(parseFloat(period.id)))
         return console.error("Atlastory#addPeriod: Period is missing an ID number.");
     if (!period.start_year || !period.end_year)
         return console.error("Atlastory#addPeriod: Period is missing start or end year.");
 
-    period = new Period(period);
+    options = options || {},
+    preload = (typeof options.preload === 'boolean') ? options.preload : false;
+
+    period = new Period(period, preload);
     exports.periods.push(period);
     Atlastory.trigger("period:add", { period: period });
 };
 
-},{"./url":11}],8:[function(require,module,exports){
+function isBefore(year, before) {
+    before = time.dateToYear(before);
+    return (year <= before);
+}
+
+function isAfter(year, after) {
+    after = time.dateToYear(after);
+    return (year > after);
+}
+
+exports.getPeriodByYear = function(year) {
+    var per, p;
+
+    for (p in exports.periods) {
+        per = exports.periods[p];
+        if (isAfter(year, per.start()) && isBefore(year, per.end())) {
+            return per;
+        }
+    }
+
+    return false;
+};
+
+},{"./time":8,"./url":11}],8:[function(require,module,exports){
 var Events = require('./Atlastory.Events');
 
 var Time = function(time) {
@@ -1043,7 +1087,7 @@ Events.apply(Time);
 var months = ["Jan.", "Feb.", "Mar.", "Apr.", "May", "Jun.", "Jul.", "Aug.", "Sep.", "Oct.", "Nov.", "Dec."];
 
 Time.prototype.set = function(date) {
-    if (typeof date === 'string') this.date = this.translateDate(date);
+    if (typeof date === 'string') this.date = this.dateToYear(date);
     else if (typeof date == 'number') this.date = date;
     else if (date && date.date || date && date.zoom) {
         if (date.date) this.date = date.date;
@@ -1058,29 +1102,38 @@ Time.prototype.get = function() {
     return this.date;
 };
 
-Time.prototype.translateDate = function(string){
-    if (typeof(string) == "number"){
-        return string;
-    } else if(string !== null){
+// Converts date string to year fraction
+Time.prototype.dateToYear = function(string) {
+    if (string !== null) {
         var arr     = string.split("-"),
-            day     = arr[2],
-            month   = (arr[1] - 1) * 30.4375,
-            year    = arr[0];
-        return parseFloat(year) + (month + day) / 365.25;
+            day     = parseFloat(arr[2]),
+            month   = (parseFloat(arr[1]) - 1) * 30.4375,
+            year    = parseFloat(arr[0]);
+        return year + (month + day) / 365.25;
     }
 };
 
+// Converts year fraction to date string
+Time.prototype.yearToDate = function(yearFrac) {
+    var year = Math.floor(yearFrac),
+        month = Math.floor((yearFrac - year) * 12) + 1,
+        day = Math.floor((yearFrac - year) * 365.25 - month * 30.4375);
+
+    if (month < 10) month = '0' + month;
+
+    return year + '-' + month + '-' + day;
+};
+
 // gets the month of a 'year fraction'
-Time.prototype.monthString = function(decimal) {
-    return months[Math.floor((decimal - Math.floor(decimal)) * 12)];
+Time.prototype.monthString = function(year) {
+    return months[Math.floor((year - Math.floor(year)) * 12)];
 };
 
 module.exports = Time;
 
 },{"./Atlastory.Events":2}],9:[function(require,module,exports){
 var Events = require('./Atlastory.Events'),
-    Time = require('./time'),
-    TimelinePeriods = require('./timeline.periods');
+    Time = require('./time');
 
 require('./jQuery.plugins');
 
@@ -1092,7 +1145,6 @@ var zoomLevels = {
 };
 
 var Timeline = function(time) {
-
     this._zoom = 0;
     this._interval = 0;
     this._visibleMarks = 0;
@@ -1114,7 +1166,6 @@ var Timeline = function(time) {
 
 var fn = Timeline.prototype;
 
-TimelinePeriods(fn);
 Events.apply(Timeline);
 
 fn.initialize = function() {
@@ -1145,7 +1196,7 @@ fn.buildDOM = function() {
     $tl.html('<div class="box">' +
         '<div class="container">' +
             '<div class="timescale">' +
-                '<div class="inner"></div>' +
+                '<div class="time"></div>' +
             '</div>' +
         '</div>' +
         '<div class="slider">' +
@@ -1179,7 +1230,6 @@ fn.create = function(mode) {
         if (left < 0) left = 0;
         this.resize({ slide: left });
     } else if (this._isInFuture()) {
-console.log("future!");
         left = this.$slider.position().left;
         this.resize({ slide: left });
     } else {
@@ -1215,7 +1265,7 @@ fn.render = function(slideX, date, fx) {
             $('<div class="major"/>').css("left", intv*i).appendTo($major);
         }
     }
-    $(".inner", $scale).empty().append($labels, $major);
+    $(".time", $scale).empty().append($labels, $major);
 
     // Moves scale to current position
     sliderPos = slideX || this.$slider.position().left;
@@ -1240,6 +1290,8 @@ fn.render = function(slideX, date, fx) {
 
     var selectMonth = this._zoom >= 3 ? Atlastory.time.monthString(date) + " " : "";
     $(".label", this.$slider).html(selectMonth + Math.floor(date));
+
+    this.trigger("render");
 };
 
 fn._yearInPx = function(year) {
@@ -1388,23 +1440,55 @@ fn.resize = function(data) {
 
 module.exports = Timeline;
 
-},{"./Atlastory.Events":2,"./jQuery.plugins":4,"./time":8,"./timeline.periods":10}],10:[function(require,module,exports){
+},{"./Atlastory.Events":2,"./jQuery.plugins":4,"./time":8}],10:[function(require,module,exports){
 var Period = require('./period');
 
 module.exports = function(fn) {
 
 fn.initPeriods = function(timeline) {
-    Atlastory.on("period:add", this.addPeriod, this);
+    this.$periods = $('<div class="time periods"/>');
+    this.$periods.appendTo(this.$scale);
+
+    Atlastory.on("period:add period:remove", this.renderPeriods, this);
+    this.on({
+        "render": this.renderPeriods,
+        "change": this.renderMap
+    }, this);
 };
 
-fn.addPeriod = function() {
-    console.log("period added!!");
+fn.renderPeriods = function() {
+    // TODO: add period ribbon to timeline
+    this.$periods.empty()
+        .append('<div class="layer"/>');
+
+    // Render map with current periods
+    this.renderMap();
+};
+
+fn.renderMap = function() {
+    var year = Atlastory.time.get(),
+        period = Period.getPeriodByYear(year);
+
+    if (period) {
+    // If there's a period, show it
+        if (period._preload) period.mapLayer.bringToFront();
+        else if (!Atlastory.layers.hasLayer(period.mapLayer)) {
+            Atlastory.layers.clearLayers()
+                .addLayer(period.mapLayer);
+        }
+    } else {
+    // If there aren't any periods, show only blank map
+        var blank = Atlastory._blankLayer;
+        if (!Atlastory.layers.hasLayer(blank)) Atlastory.layers.clearLayers()
+            .addLayer(blank);
+    }
 };
 
 };
 
 },{"./period":7}],11:[function(require,module,exports){
 module.exports = {
+    blankmap: "http://{s}.tiles.mapbox.com/v3/atlastory.map-6k2hhm7v/{z}/{x}/{y}.png",
     base: "http://{s}.tiles.mapbox.com/v3",
     name: "/atlastory.map-6k2hhm7v",
     tile: "/{z}/{x}/{y}.",
