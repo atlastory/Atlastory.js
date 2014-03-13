@@ -961,13 +961,18 @@ var Map = L.Map;
 TimelinePeriods(Timeline.prototype);
 
 module.exports = function(id, time, options) {
+    var mapEl, mapViewEl, preload, timezoom;
 
-    var mapEl = document.getElementById(id),
-        mapViewEl = document.createElement('div');
+    mapEl = document.getElementById(id);
+    mapViewEl = document.createElement('div');
 
     mapViewEl.setAttribute('id', 'mapView');
     mapEl.className = 'atlastory-map';
     mapEl.appendChild(mapViewEl);
+
+    options = options || {};
+    preload = (typeof options.preload === 'boolean') ? options.preload : false;
+    timezoom = options.timezoom || 2;
 
     var map = Atlastory.map = new Map('mapView', {
         zoom: 3,
@@ -983,9 +988,11 @@ module.exports = function(id, time, options) {
         reuseTiles: true
     });
     Atlastory.layers = new L.LayerGroup().addTo(map);
-    Atlastory._container = mapEl;
+    if (preload) Atlastory.layers.addLayer(Atlastory._blankLayer);
 
-    Atlastory.timeline = new Timeline(time);
+    Atlastory._container = mapEl;
+    Atlastory._options = options;
+    Atlastory.timeline = new Timeline(time, timezoom);
 
     return map;
 };
@@ -999,7 +1006,7 @@ var time = new Time();
 
 exports.periods = [];
 
-var Period = function(data, preload) {
+var Period = function(data) {
     this.id = data.id;
     this.start_year = data.start_year;
     this.start_month = data.start_month || 1;
@@ -1007,10 +1014,10 @@ var Period = function(data, preload) {
     this.end_year = data.end_year;
     this.end_month = data.end_month || 1;
     this.end_day = data.end_day || 1;
-    this._preload = preload;
+    this._preload = Atlastory._options.preload;
 
     this.mapLayer = exports.periodLayer(this.id);
-    if (preload) Atlastory.layers.addLayer(this.mapLayer);
+    if (this._preload) Atlastory.layers.addLayer(this.mapLayer);
 };
 
 Period.prototype.start = function() {
@@ -1036,17 +1043,14 @@ exports.periodLayer = function(period, options) {
 };
 
 exports.addPeriod = function(period, options) {
-    var preload;
-
     if (!period.id || isNaN(parseFloat(period.id)))
         return console.error("Atlastory#addPeriod: Period is missing an ID number.");
     if (!period.start_year || !period.end_year)
         return console.error("Atlastory#addPeriod: Period is missing start or end year.");
 
-    options = options || {},
-    preload = (typeof options.preload === 'boolean') ? options.preload : false;
+    options = options || {};
 
-    period = new Period(period, preload);
+    period = new Period(period);
     exports.periods.push(period);
     Atlastory.trigger("period:add", { period: period });
 };
@@ -1079,9 +1083,9 @@ exports._dateToYear = time.dateToYear;
 },{"./time":8,"./url":11}],8:[function(require,module,exports){
 var Events = require('./Atlastory.Events');
 
-var Time = function(time) {
+var Time = function(time, zoom) {
     this.date = (typeof time === 'number') ? time : 1940;
-    this.zoom = 2;
+    this.zoom = (typeof time === 'number') ? zoom : 2;
 };
 
 Events.apply(Time);
@@ -1143,10 +1147,11 @@ var zoomLevels = {
     0: {scale: 100, interval: 90},
     1: {scale: 25,  interval: 80},
     2: {scale: 10,  interval: 70},
-    3: {scale: 1,   interval: 60}
+    3: {scale: 5,   interval: 65},
+    4: {scale: 1,   interval: 60}
 };
 
-var Timeline = function(time) {
+var Timeline = function(time, zoom) {
     this._zoom = 0;
     this._interval = 0;
     this._visibleMarks = 0;
@@ -1155,7 +1160,7 @@ var Timeline = function(time) {
     this._map = Atlastory.map;
     this._container = Atlastory._container;
 
-    Atlastory.time = new Time(time);
+    Atlastory.time = new Time(time, zoom || 2);
 
     // Trigger update whenever date is updated externally
     this.on("change", this.change, this);
@@ -1491,7 +1496,8 @@ fn.renderMap = function() {
     } else {
     // If there aren't any periods, show only blank map
         var blank = Atlastory._blankLayer;
-        if (!Atlastory.layers.hasLayer(blank)) Atlastory.layers.clearLayers()
+        if (period._preload) blank.bringToFront();
+        else if (!Atlastory.layers.hasLayer(blank)) Atlastory.layers.clearLayers()
             .addLayer(blank);
     }
 };

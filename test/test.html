@@ -29,7 +29,10 @@
             { id: 3, start_year: 1890, end_year: 1900 }
         ];
 
-        var map = Atlastory.map('map', 1956);
+        var map = Atlastory.map('map', 1956, {
+            preload: false,
+            timezoom: 3
+        });
 
         for (var p in periods) {
             Atlastory.addPeriod(periods[p]);
