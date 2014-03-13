@@ -1074,6 +1074,8 @@ exports.getPeriodByYear = function(year) {
     return false;
 };
 
+exports._dateToYear = time.dateToYear;
+
 },{"./time":8,"./url":11}],8:[function(require,module,exports){
 var Events = require('./Atlastory.Events');
 
@@ -1457,9 +1459,19 @@ fn.initPeriods = function(timeline) {
 };
 
 fn.renderPeriods = function() {
-    // TODO: add period ribbon to timeline
-    this.$periods.empty()
-        .append('<div class="layer"/>');
+    var per, p, left, right;
+
+    // Creates period ribbons on timeline
+    var $ribbons = $('<div class="layer"/>');
+    for (p in Period.periods) {
+        per = Period.periods[p];
+        left = this._yearInPx(Period._dateToYear(per.start()));
+        right = this._yearInPx(Period._dateToYear(per.end()));
+        $('<div class="ribbon"/>').css("left", left).width(right - left)
+            .appendTo($ribbons);
+    }
+
+    this.$periods.empty().append($ribbons);
 
     // Render map with current periods
     this.renderMap();
@@ -10838,7 +10850,7 @@ L.Map.include({
 },{}],14:[function(require,module,exports){
 module.exports={
   "name": "Atlastory.js",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Atlastory client-side API",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"

@@ -17,6 +17,10 @@
 @timeBorders:     1px solid darken(@timeBG,20%);
 @timeMarkBorder:  1px solid @timeFG;
 
+@ribbon-color:    @purple;
+@ribbon-height:   10px;
+@ribbon-top:      7px;
+
 .timeline {
   visibility: hidden;
   position: absolute;
@@ -81,6 +85,15 @@
     height: @timeHeight;
     border-left: @timeMarkBorder;
     .opacity(35);
+  }
+  .ribbon {
+    position: absolute;
+    top: @ribbon-top;
+    height: @ribbon-height;
+    box-sizing: border-box;
+    #translucent > .background(@ribbon-color, 0.8);
+    //background: @ribbon-color;
+    border: 1px solid darken(@ribbon-color, 15%);
   }
 }
 
