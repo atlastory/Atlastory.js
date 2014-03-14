@@ -2,7 +2,7 @@
 require('./lib/leaflet');
 require('./lib/atlastory');
 
-},{"./lib/atlastory":3,"./lib/leaflet":5}],2:[function(require,module,exports){
+},{"./lib/atlastory":3,"./lib/leaflet":6}],2:[function(require,module,exports){
 // Adapted from Leaflet Events
 
 var Avents = {};
@@ -245,28 +245,182 @@ Atlastory.hash = L.hash;
 
 window.Atlastory = module.exports = Atlastory;
 
-},{"../package.json":14,"./Atlastory.Events":2,"./map":6,"./period":7}],4:[function(require,module,exports){
+},{"../package.json":15,"./Atlastory.Events":2,"./map":7,"./period":8}],4:[function(require,module,exports){
+/*
+ * jquery.finger
+ * https://github.com/ngryman/jquery.finger
+ *
+ * Copyright (c) 2013 ngryman
+ * Licensed under the MIT license.
+ */
+
+(function($, ua) {
+
+  var isChrome = /chrome/i.exec(ua),
+    isAndroid = /android/i.exec(ua),
+    hasTouch = 'ontouchstart' in window && !(isChrome && !isAndroid),
+    startEvent = hasTouch ? 'touchstart' : 'mousedown',
+    stopEvent = hasTouch ? 'touchend touchcancel' : 'mouseup mouseleave',
+    moveEvent = hasTouch ? 'touchmove' : 'mousemove',
+
+    namespace = 'finger',
+    rootEl = $('html')[0],
+
+    start = {},
+    move = {},
+    motion, cancel, safeguard, timeout, prevEl, prevTime,
+
+    Finger = $.Finger = {
+      pressDuration: 300,
+      doubleTapInterval: 300,
+      flickDuration: 150,
+      motionThreshold: 5
+    };
+
+  function page(coord, event) {
+    return (hasTouch ? event.originalEvent.touches[0] : event)['page' + coord.toUpperCase()];
+  }
+
+  function trigger(event, evtName, remove) {
+    var fingerEvent = $.Event(evtName, move);
+    $.event.trigger(fingerEvent, {
+      originalEvent: event
+    }, event.target);
+
+    if (fingerEvent.isDefaultPrevented()) event.preventDefault();
+
+    if (remove) {
+      $.event.remove(rootEl, moveEvent + '.' + namespace, moveHandler);
+      $.event.remove(rootEl, stopEvent + '.' + namespace, stopHandler);
+    }
+  }
+
+  function startHandler(event) {
+    var timeStamp = event.timeStamp || +new Date();
+
+    if (safeguard == timeStamp) return;
+    safeguard = timeStamp;
+
+    // initializes data
+    start.x = move.x = page('x', event);
+    start.y = move.y = page('y', event);
+    start.time = timeStamp;
+    start.target = event.target;
+    move.orientation = null;
+    move.end = false;
+    motion = false;
+    cancel = false;
+    timeout = setTimeout(function() {
+      cancel = true;
+      trigger(event, 'press');
+    }, $.Finger.pressDuration);
+
+    $.event.add(rootEl, moveEvent + '.' + namespace, moveHandler);
+    $.event.add(rootEl, stopEvent + '.' + namespace, stopHandler);
+
+    // global prevent default
+    if (Finger.preventDefault) event.preventDefault();
+  }
+
+  function moveHandler(event) {
+    // motion data
+    move.x = page('x', event);
+    move.y = page('y', event);
+    move.dx = move.x - start.x;
+    move.dy = move.y - start.y;
+    move.adx = Math.abs(move.dx);
+    move.ady = Math.abs(move.dy);
+
+    // security
+    motion = move.adx > Finger.motionThreshold || move.ady > Finger.motionThreshold;
+    if (!motion) return;
+
+    // moves cancel press events
+    clearTimeout(timeout);
+
+    // orientation
+    if (!move.orientation) {
+      if (move.adx > move.ady) {
+        move.orientation = 'horizontal';
+        move.direction = move.dx > 0 ? +1 : -1;
+      } else {
+        move.orientation = 'vertical';
+        move.direction = move.dy > 0 ? +1 : -1;
+      }
+    }
+
+    // for delegated events, the target may change over time
+    // this ensures we notify the right target and simulates the mouseleave behavior
+    if (event.target !== start.target) {
+      event.target = start.target;
+      stopHandler.call(this, $.Event(stopEvent + '.' + namespace, event));
+      return;
+    }
+
+    // fire drag event
+    trigger(event, 'drag');
+  }
+
+  function stopHandler(event) {
+    var timeStamp = event.timeStamp || +new Date(),
+      dt = timeStamp - start.time,
+      evtName;
+
+    // always clears press timeout
+    clearTimeout(timeout);
+
+    // ensures start target and end target are the same
+    if (event.target !== start.target) return;
+
+    // tap-like events
+    if (!motion && !cancel) {
+      var doubleTap = prevEl === event.target && timeStamp - prevTime < Finger.doubleTapInterval;
+      evtName = doubleTap ? 'doubletap' : 'tap';
+      prevEl = doubleTap ? null : start.target;
+      prevTime = timeStamp;
+    }
+    // motion events
+    else {
+      if (dt < Finger.flickDuration) trigger(event, 'flick');
+      move.end = true;
+      evtName = 'drag';
+    }
+
+    trigger(event, evtName, true);
+  }
+
+  // initial binding
+  $.event.add(rootEl, startEvent + '.' + namespace, startHandler);
+
+})(jQuery, navigator.userAgent);
+
+},{}],5:[function(require,module,exports){
 (function($) {
 
     // Gets mouse position for all browsers
 
+    var isChrome = /chrome/i.exec(navigator.userAgent),
+        isAndroid = /android/i.exec(navigator.userAgent),
+        hasTouch = 'ontouchstart' in window && !(isChrome && !isAndroid);
+
     var Mouse = {
         x: 0,
         y: 0,
-        init: function(c){
-            var posX, posY;
-            if (!c) c = window.event;
-            if (c.pageX||c.pageY){posX=c.pageX; posY=c.pageY;}
-            else if (c.clientX||c.clientY){
-                posX = c.clientX + document.body.scrollLeft + document.documentElement.scrollLeft;
-                posY = c.clientY + document.body.scrollTop + document.documentElement.scrollTop;}
-            Mouse.x = posX;
-            Mouse.y = posY;
+        init: function(e) {
+            Mouse.x = Mouse.page('x', e);
+            Mouse.y = Mouse.page('y', e);
+        },
+        page: function(axis, e) {
+            if (!e) e = window.event;
+            axis = axis.toUpperCase();
+            if (hasTouch) e = e.originalEvent.touches[0];
+            if (e['page'+axis]) return e['page'+axis];
+            else if (e['client'+axis]) return e['client'+axis] + document.body.scrollLeft + document.documentElement.scrollLeft;
         }
     };
 
     $(function(){
-        $(window).bind("mousemove", Mouse.init);
+        $(window).bind("mousemove touchmove", Mouse.init);
     });
 
     // Prevents selection
@@ -274,15 +428,25 @@ window.Atlastory = module.exports = Atlastory;
     $.fn.selectOff = function() {
         return this.each(function(){
             if ($.support.selectstart)
-                $(this).on("selectstart.selectOff", function(){ return false; });
-            else $(this).on("mousedown.selectOff", function(){ return false; });
+                $(this).on("selectstart.select", function(){ return false; });
+            else $(this).on("mousedown.select touchstart.select", function(){ return false; });
         });
     };
     $.fn.selectOn = function() {
-        return this.off(".selectOff");
+        return this.off(".select");
     };
 
-    // Drag element UI
+    /* Drag element UI
+     *
+     * constraint   STRING    x, y, container, x-container, y-container
+     * xbounds      ARRAY     [left limit, right limit]
+     * ybounds      ARRAY     [top limit, bottom limit]
+     * snap         ARRAY     [x snap, y snap]
+     * dragClass    STRING    name of class to toggle when dragging
+     * onStart      FUNCTION  runs when dragging starts
+     * onDrag       FUNCTION  runs while dragging
+     * onStop       FUNCTION  runs when dragging stops
+     */
 
     $.fn.drag = function(options){
         var o = $.extend({
@@ -299,6 +463,7 @@ window.Atlastory = module.exports = Atlastory;
             $(this).data("drag", new DragObj($(this), o));
         });
     };
+
     $.fn.dragUpdate = function(o){ return $(this).data("drag").update(o); };
 
     function DragObj(el, o){
@@ -310,6 +475,11 @@ window.Atlastory = module.exports = Atlastory;
             $.extend(self.o, options);
         };
 
+        function newEvent(e) {
+            if (hasTouch) return e.originalEvent.touches[0];
+            else return e;
+        }
+
         function init(){
             ui.pos = el.position();
             el.css({
@@ -317,58 +487,66 @@ window.Atlastory = module.exports = Atlastory;
                 top: ui.pos.top,
                 left: ui.pos.left
             });
-            el.mousedown(setEvents);
+            el.on("mousedown touchstart", setEvents);
             return self;
         }
 
-        function setEvents(e){
+        function setEvents(e) {
             // Adds drag events
             window.focus();
             $(document)
-                .mousemove(mouseMove)
-                .mouseup(mouseUp)
+                .on("mousemove.drag touchmove.drag", mouseMove)
+                .on("mouseup.drag touchend.drag touchcancel.drag", mouseUp)
                 .selectOff();
+
+            e.preventDefault();
 
             // Sets starting positions
             ui.el = el;
-            ui.startX = Mouse.x;
-            ui.startY = Mouse.y;
+            ui.startX = Mouse.page('x', e);
+            ui.startY = Mouse.page('y', e);
             ui.pos = el.position();
             el.addClass(self.o.dragClass);
-            self.o.onStart(e,ui);
+            self.o.onStart(newEvent(e), ui);
             return false;
         }
 
-        function mouseMove(e){
+        function mouseMove(e) {
             window.focus();
             var movedX  = Mouse.x - ui.startX,
                 movedY  = Mouse.y - ui.startY,
-                parent  = el.parent();
+                parent  = el.parent(),
+                cons = self.o.constraint;
 
             movedX = Math.round(movedX/self.o.snap[0]) * self.o.snap[0];
             movedY = Math.round(movedY/self.o.snap[1]) * self.o.snap[1];
 
-            if (self.o.constraint == "x") movedY = 0;
-            if (self.o.constraint == "y") movedX = 0;
+            if (/^x/.test(cons)) movedY = 0;
+            if (/^y/.test(cons)) movedX = 0;
 
             var moveX = ui.pos.left + movedX,
                 moveY = ui.pos.top + movedY,
                 rightBound, bottomBound;
 
-            if (self.o.constraint=="container"){
-                rightBound  = parent.width() - el.outerWidth();
-                bottomBound = parent.height() - el.outerHeight();
-
-                if (moveX < 0) moveX = 0;
-                if (moveX > rightBound) moveX = rightBound;
-                if (moveY < 0) moveY = 0;
-                if (moveY > bottomBound) moveY = bottomBound;
+            if (/container/.test(cons)){
+                if (/^x|^c/.test(cons)) {
+                    rightBound  = parent.width() - el.outerWidth();
+                    if (moveX < 0) moveX = 0;
+                    if (moveX > rightBound) moveX = rightBound;
+                }
+                if (/^y|^c/.test(cons)) {
+                    bottomBound = parent.height() - el.outerHeight();
+                    if (moveY < 0) moveY = 0;
+                    if (moveY > bottomBound) moveY = bottomBound;
+                }
             }
+
             if (self.o.xbounds) {
                 rightBound = self.o.xbounds[1] - el.outerWidth();
                 if (moveX < self.o.xbounds[0]) moveX = self.o.xbounds[0];
                 if (moveX > rightBound) moveX = rightBound;
             }
+
             if (self.o.ybounds) {
                 bottomBound = self.o.ybounds[1] - el.outerHeight();
                 if (moveY < self.o.ybounds[0]) moveY = self.o.ybounds[0];
@@ -380,16 +558,15 @@ window.Atlastory = module.exports = Atlastory;
             ui.top = moveY;
             ui.movedX = movedX;
             ui.movedY = movedY;
-            if (movedX !== 0 || movedY !== 0) self.o.onDrag(e,ui);
+            if (movedX !== 0 || movedY !== 0) self.o.onDrag(newEvent(e), ui);
+
+            e.preventDefault();
         }
 
         function mouseUp(e){
-            $(document)
-                .off("mousemove",mouseMove)
-                .off("mouseup",mouseUp)
-                .selectOn();
+            $(document).off(".drag").selectOn();
             el.removeClass(self.o.dragClass);
-            self.o.onStop(e,ui);
+            self.o.onStop(newEvent(e), ui);
         }
         return init();
     }
@@ -947,11 +1124,11 @@ window.Atlastory = module.exports = Atlastory;
 
 })(jQuery);
 
-},{}],5:[function(require,module,exports){
+},{}],6:[function(require,module,exports){
 window.L = require('leaflet/dist/leaflet-src');
 require('leaflet-hash/leaflet-hash');
 
-},{"leaflet-hash/leaflet-hash":12,"leaflet/dist/leaflet-src":13}],6:[function(require,module,exports){
+},{"leaflet-hash/leaflet-hash":13,"leaflet/dist/leaflet-src":14}],7:[function(require,module,exports){
 var Timeline = require('./timeline'),
     TimelinePeriods = require('./timeline.periods'),
     url = require('./url');
@@ -974,7 +1151,8 @@ module.exports = function(id, time, options) {
     var o = L.Util.extend({
         preload: false,
         timezoom: 2,
-        rainbow: true
+        rainbow: true,
+        detectRetina: false
     }, options);
 
     var map = Atlastory.map = new Map('mapView', {
@@ -988,7 +1166,8 @@ module.exports = function(id, time, options) {
 
     Atlastory._blankLayer = new L.TileLayer(url.blankmap, {
         maxZoom: 9,
-        reuseTiles: true
+        reuseTiles: true,
+        detectRetina: o.detectRetina
     });
     Atlastory.layers = new L.LayerGroup().addTo(map);
     if (o.preload) Atlastory.layers.addLayer(Atlastory._blankLayer);
@@ -1000,7 +1179,7 @@ module.exports = function(id, time, options) {
     return map;
 };
 
-},{"./timeline":9,"./timeline.periods":10,"./url":11}],7:[function(require,module,exports){
+},{"./timeline":10,"./timeline.periods":11,"./url":12}],8:[function(require,module,exports){
 var url = require('./url'),
     Time = require('./time');
 
@@ -1041,7 +1220,8 @@ exports.periodLayer = function(period, options) {
         p: period,
         attribution: '&copy; <a href="http://www.atlastory.com/">Atlastory</a> contributors',
         maxZoom: 9,
-        reuseTiles: true
+        reuseTiles: true,
+        detectRetina: Atlastory._options.detectRetina
     });
 };
 
@@ -1083,7 +1263,7 @@ exports.getPeriodByYear = function(year) {
 
 exports._dateToYear = time.dateToYear;
 
-},{"./time":8,"./url":11}],8:[function(require,module,exports){
+},{"./time":9,"./url":12}],9:[function(require,module,exports){
 var Events = require('./Atlastory.Events');
 
 var Time = function(time, zoom) {
@@ -1140,9 +1320,15 @@ Time.prototype.monthString = function(year) {
 
 module.exports = Time;
 
-},{"./Atlastory.Events":2}],9:[function(require,module,exports){
+},{"./Atlastory.Events":2}],10:[function(require,module,exports){
 var Events = require('./Atlastory.Events'),
     Time = require('./time');
+
+var isChrome = /chrome/i.exec(navigator.userAgent),
+    isAndroid = /android/i.exec(navigator.userAgent),
+    hasTouch = 'ontouchstart' in window && !(isChrome && !isAndroid);
+
+if (hasTouch) require('./jQuery.finger');
 
 require('./jQuery.plugins');
 
@@ -1179,20 +1365,19 @@ var fn = Timeline.prototype;
 Events.apply(Timeline);
 
 fn.initialize = function() {
-    var self = this;
-
     this.$timeline = $('<div class="timeline"/>');
     this.$timeline.appendTo(this._container);
     this.buildDOM();
 
     // UI interaction events
-    this.$scale.dblclick(this.moveToDate.bind(this));
+    if (hasTouch) this.$scale.on("tap doubletap", this.moveToDate.bind(this));
+    else this.$scale.on("dblclick", this.moveToDate.bind(this));
     this.$slider.drag({
         constraint: "x",
         xbounds: [0, 1000],
         dragClass: "drag",
-        onStop: self.stop.bind(this),
-        onDrag: self.drag.bind(this)
+        onStop: this.stop.bind(this),
+        onDrag: this.drag.bind(this)
     });
 
     this.create();
@@ -1406,10 +1591,11 @@ fn.stop = function(e,ui){
 };
 
 fn.moveToDate = function(e){
-    var left    = e.clientX - this.$timeline.position().left,
-        width   = this.$slider.width(),
-        newPos  = left - width/2,
-        self    = this;
+    var x = e.clientX || e.x,
+        left   = x - this.$timeline.position().left,
+        width  = this.$slider.width(),
+        newPos = left - width/2,
+        self   = this;
 
     this.$slider.animate({ left: newPos }, 400, "swing", function(){
         self.trigger("change");
@@ -1442,7 +1628,10 @@ fn.resize = function(data) {
 
     this.$container.width(width);
     this.$scale.width(this._visibleMarks * this._interval * 5);
-    this.$slider.css('left', slideX);
+    this.$slider.css('left', slideX).dragUpdate({
+        //snap: [this._interval/(zoomLevels[this._zoom].scale * 12), 1],
+        xbounds: [-this._interval / 2, width + this._interval / 2]
+    });
 
     this.trigger("resize");
     this.render();
@@ -1450,7 +1639,7 @@ fn.resize = function(data) {
 
 module.exports = Timeline;
 
-},{"./Atlastory.Events":2,"./jQuery.plugins":4,"./time":8}],10:[function(require,module,exports){
+},{"./Atlastory.Events":2,"./jQuery.finger":4,"./jQuery.plugins":5,"./time":9}],11:[function(require,module,exports){
 var Period = require('./period');
 
 module.exports = function(fn) {
@@ -1523,7 +1712,7 @@ fn.renderMap = function() {
 
 };
 
-},{"./period":7}],11:[function(require,module,exports){
+},{"./period":8}],12:[function(require,module,exports){
 module.exports = {
     blankmap: "http://{s}.tiles.mapbox.com/v3/atlastory.map-6k2hhm7v/{z}/{x}/{y}.png",
     base: "http://{s}.tiles.mapbox.com/v3",
@@ -1538,7 +1727,7 @@ module.exports = {
     }
 };
 
-},{}],12:[function(require,module,exports){
+},{}],13:[function(require,module,exports){
 (function(window) {
 	var HAS_HASHCHANGE = (function() {
 		var doc_mode = window.documentMode;
@@ -1702,7 +1891,7 @@ module.exports = {
 	};
 })(window);
 
-},{}],13:[function(require,module,exports){
+},{}],14:[function(require,module,exports){
 /*
  Leaflet, a JavaScript library for mobile-friendly interactive maps. http://leafletjs.com
  (c) 2010-2013, Vladimir Agafonkin
@@ -10872,7 +11061,7 @@ L.Map.include({
 
 
 }(window, document));
-},{}],14:[function(require,module,exports){
+},{}],15:[function(require,module,exports){
 module.exports={
   "name": "Atlastory.js",
   "version": "0.0.2",
