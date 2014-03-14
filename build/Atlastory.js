@@ -243,6 +243,9 @@ Atlastory.hash = L.hash;
 //gridLayer
 //featureLayer
 
+Atlastory.Util = {};
+Atlastory.Browser = L.Browser;
+
 window.Atlastory = module.exports = Atlastory;
 
 },{"../package.json":15,"./Atlastory.Events":2,"./map":7,"./period":8}],4:[function(require,module,exports){
