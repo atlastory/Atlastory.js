@@ -13,3 +13,14 @@
   width: 100%;
   height: 100%;
 }
+
+@logo-normal-size: 0.8;
+@logo-retina-size: 0.5;
+.leaflet-container .map-logo {
+  width: 175px * @logo-normal-size;
+  height: 43px * @logo-normal-size;
+  margin: 0;
+  background-image: @img-logo-map;
+  background-repeat: no-repeat;
+  background-size: contain;
+}
