@@ -1,2 +1,2 @@
-require('./lib/leaflet');
+require('./lib/vendor/leaflet');
 require('./lib/atlastory');
