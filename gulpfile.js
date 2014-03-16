@@ -47,7 +47,7 @@ function doTask(names) {
 }
 
 gulp.task('watch', function() {
-    gulp.watch(['lib/*.js', 'index.js'], doTask('browserify'));
+    gulp.watch(['lib/*.js', 'lib/*/**.js', 'index.js'], doTask('browserify'));
     gulp.watch('styles/*', doTask('styles'));
 });
 

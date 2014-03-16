@@ -1,12 +1,13 @@
 @black:                 #000;
-@grayDarker:            #222;
-@grayDark:              #333;
-@gray:                  #555;
-@grayLight:             #999;
-@grayLighter:           #eee;
+@gray-darker:           lighten(#000, 13.5%); // #222
+@gray-dark:             lighten(#000, 20%);   // #333
+@gray:                  lighten(#000, 33.5%); // #555
+@gray-light:            lighten(#000, 60%);   // #999
+@gray-lighter:          lighten(#000, 93.5%); // #eee
 @white:                 #fff;
+
 @blue:                  #049cdb;
-@blueDark:              #0064cd;
+@blue-dark:             #0064cd;
 @purple:                #7a43b6;
 
 // Atlastory accent colors
@@ -16,8 +17,14 @@
 @atlastory-lime:        #aecb35;
 @atlastory-green:       #46b861;
 
-@sansFontFamily:        "Helvetica Neue", Helvetica, Arial, sans-serif;
-@baseFontSize:          13px;
+@text-color:              @gray-dark;
+@link-color:              @blue;
+@link-hover-color:        darken(@link-color, 15%);
+
+@font-family-base:        "Helvetica Neue", Helvetica, Arial, sans-serif;
+@font-size-base:          13px;
+@line-height-base:        1.428571429; // 20/14
+@line-height-computed:    floor((@font-size-base * @line-height-base)); // ~20px
 
 @imgRoot:         "http://img.atlastory.com/Atlastory.js/v1";
 @img-logo-map:    url('@{imgRoot}/logo-map.png');
@@ -137,4 +144,47 @@
        -o-text-shadow: @offsetTop @offsetLeft @blur @color;
   -webkit-text-shadow: @offsetTop @offsetLeft @blur @color;
           text-shadow: @offsetTop @offsetLeft @blur @color;
+}
+
+.translate(@x; @y) {
+  -webkit-transform: translate(@x, @y);
+      -ms-transform: translate(@x, @y); // IE9 only
+       -o-transform: translate(@x, @y);
+          transform: translate(@x, @y);
+}
+
+.transition(@transition) {
+  -webkit-transition: @transition;
+       -o-transition: @transition;
+          transition: @transition;
+}
+
+.transition-transform(@transition) {
+  -webkit-transition: -webkit-transform @transition;
+     -moz-transition: -moz-transform @transition;
+       -o-transition: -o-transform @transition;
+          transition: transform @transition;
+}
+
+.fade {
+  opacity: 0;
+  .transition(opacity .15s linear);
+  &.in {
+    opacity: 1;
+  }
+}
+
+.collapse {
+  display: none;
+
+  &.in      { display: block; }
+  tr&.in    { display: table-row; }
+  tbody&.in { display: table-row-group; }
+}
+
+.collapsing {
+  position: relative;
+  height: 0;
+  overflow: hidden;
+  .transition(height .35s ease);
 }

@@ -1,12 +1,27 @@
 @import "mixins";
+
+@import "tooltip";
+@import "modals";
+
 @import (less) "../node_modules/leaflet/dist/leaflet.css";
 @import "timeline";
 
 .atlastory-map {
-  background: @grayLighter;
-  font-family: @sansFontFamily;
-  font-size: @baseFontSize;
+  background: @gray-lighter;
+  color: @text-color;
+  font-family: @font-family-base;
+  font-size: @font-size-base;
+  line-height: @line-height-computed;
   overflow: hidden;
+
+  a {
+    color: @link-color;
+    text-decoration: none;
+    &:hover, &:focus {
+      color: @link-hover-color;
+      text-decoration: underline;
+    }
+  }
 }
 
 #mapView {
@@ -23,4 +38,18 @@
   background-image: @img-logo-map;
   background-repeat: no-repeat;
   background-size: contain;
+  cursor: pointer;
+}
+
+@media  (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dppx) {
+  .leaflet-container .map-logo {
+    width: 175px * @logo-retina-size;
+    height: 43px * @logo-retina-size;
+  }
+}
+
+a.leaflet-control-zoom-in,
+a.leaflet-control-zoom-out {
+  color: black;
+  &:hover { color: black; text-decoration: none; }
 }

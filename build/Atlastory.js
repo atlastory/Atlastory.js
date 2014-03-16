@@ -1,8 +1,753 @@
 (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);throw new Error("Cannot find module '"+o+"'")}var f=n[o]={exports:{}};t[o][0].call(f.exports,function(e){var n=t[o][1][e];return s(n?n:e)},f,f.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
-require('./lib/leaflet');
+require('./lib/vendor/leaflet');
 require('./lib/atlastory');
 
-},{"./lib/atlastory":3,"./lib/leaflet":6}],2:[function(require,module,exports){
+},{"./lib/atlastory":2,"./lib/vendor/leaflet":14}],2:[function(require,module,exports){
+// Hardcode image path
+window.L.Icon.Default.imagePath = 'http://img.atlastory.com/Atlastory.js/v1';
+
+var Atlastory = {}, Period;
+
+require('./vendor/Atlastory.Events').apply(Atlastory);
+
+window.Atlastory = module.exports = Atlastory;
+
+Atlastory.VERSION = require('../package.json').version;
+Atlastory.Util = {};
+Atlastory.Browser = window.L.Browser;
+Atlastory.hash = window.L.hash;
+Atlastory.Modal = require('./modal');
+
+Period = require('./period');
+Atlastory.periodLayer = Period.periodLayer;
+Atlastory.addPeriod = Period.addPeriod;
+
+Atlastory.map = require('./map');
+Atlastory.query = require('./query');
+
+//marker
+//gridControl
+//gridLayer
+//featureLayer
+
+},{"../package.json":19,"./map":4,"./modal":5,"./period":6,"./query":7,"./vendor/Atlastory.Events":11}],3:[function(require,module,exports){
+module.exports = {
+    blankmap: "http://{s}.tiles.mapbox.com/v3/atlastory.map-6k2hhm7v/{z}/{x}/{y}.png",
+    base: "http://{s}.tiles.mapbox.com/v3",
+    name: "/atlastory.map-6k2hhm7v",
+    tile: "/{z}/{x}/{y}.",
+    format: "png",
+    attribution: '&copy; <a href="http://forum.atlastory.com/">Atlastory contributors</a>',
+    url: function() {
+        return this.base + this.name + this.tile + this.format;
+    },
+    period: function(period) {
+        return this.url().replace('{p}', period);
+    }
+};
+
+},{}],4:[function(require,module,exports){
+var Timeline = require('./timeline'),
+    TimelinePeriods = require('./timeline.periods'),
+    config = require('./config');
+
+
+TimelinePeriods(Timeline.prototype);
+
+require('./vendor/tooltip');
+
+var Logo = L.Control.extend({
+    options: { position: 'bottomright' },
+    onAdd: function(map) {
+        var $logo = $('<div class="map-logo"/>');
+
+        var popoverOps = {
+                placement: 'top',
+                trigger: 'click',
+                container: '.atlastory-map',
+                html: true,
+                content: '<strong><a href="http://atlastory.com/">Atlastory</a> visualizes history on a map.</strong> This map is a demo, but our goal is the ability to explore an interactive map at any point in time. Help us by <a href="http://forum.atlastory.com/">joining the community</a>.'
+            };
+
+        Atlastory._logo = $logo[0];
+
+        return $logo[0];
+    }
+});
+
+var Map = function(id, time, options) {
+    var mapEl, mapViewEl;
+
+    mapEl = document.getElementById(id);
+    mapViewEl = document.createElement('div');
+
+    mapViewEl.setAttribute('id', 'mapView');
+    mapEl.className = 'atlastory-map';
+    mapEl.appendChild(mapViewEl);
+
+    // Set default options
+    var o = L.Util.extend({
+        preload: false,
+        timezoom: 2,
+        rainbow: true,
+        detectRetina: false
+    }, options);
+
+    // Create map & controls
+    var map = Atlastory.map = new L.Map('mapView', {
+        zoom: 3,
+        center: [20.72, -22.41],
+        zoomControl: false,
+        inertia: true
+    });
+
+    map.addControl(new Logo());
+    if (!Atlastory.Browser.touch)
+        new L.Control.Zoom({ position: 'bottomleft' }).addTo(map);
+
+    // Create "blank" map layer & default layer group
+    Atlastory._blankLayer = new L.TileLayer(config.blankmap, {
+        maxZoom: 9,
+        reuseTiles: true,
+        detectRetina: o.detectRetina
+    });
+    Atlastory.layers = new L.LayerGroup().addTo(map);
+    if (o.preload) Atlastory.layers.addLayer(Atlastory._blankLayer);
+
+    Atlastory._container = mapEl;
+    Atlastory._options = o;
+    Atlastory.timeline = new Timeline(time, o.timezoom);
+
+    return map;
+};
+
+module.exports = Map;
+
+},{"./config":3,"./timeline":9,"./timeline.periods":10,"./vendor/tooltip":16}],5:[function(require,module,exports){
+// Wrapper for creating Bootstrap Modal
+
+require('./vendor/modal');
+
+var Modal = function(content) {
+    var $modal = $('' +
+        '<div class="modal fade" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true">' +
+            '<div class="modal-dialog">' +
+                '<div class="modal-content">' +
+                    '<div class="modal-body">' +
+                        '<button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>' +
+                    '</div>' +
+                '</div>' +
+            '</div>' +
+        '</div>');
+
+    $('.modal-body', $modal).append(content);
+
+    $modal.modal({ show: false }).appendTo('body');
+
+    this.$modal = $modal;
+};
+
+Modal.prototype.show = function() {
+    this.$modal.modal('show');
+};
+
+Modal.prototype.hide = function() {
+    this.$modal.modal('hide');
+};
+
+module.exports = Modal;
+
+},{"./vendor/modal":15}],6:[function(require,module,exports){
+var config = require('./config'),
+    Time = require('./time');
+
+var PeriodLayer = L.TileLayer;
+var time = new Time();
+
+exports.periods = [];
+
+var Period = function(data) {
+    this.id = data.id;
+    this.start_year = data.start_year;
+    this.start_month = data.start_month || 1;
+    this.start_day = data.start_day || 1;
+    this.end_year = data.end_year;
+    this.end_month = data.end_month || 1;
+    this.end_day = data.end_day || 1;
+    this._preload = Atlastory._options.preload;
+
+    this.mapLayer = exports.periodLayer(this.id);
+    if (this._preload) Atlastory.layers.addLayer(this.mapLayer);
+};
+
+Period.prototype.start = function() {
+    return this.start_year + '-' +
+           this.start_month + '-' +
+           this.start_day;
+};
+
+Period.prototype.end = function() {
+    return this.end_year + '-' +
+           this.end_month + '-' +
+           this.end_day;
+};
+
+exports.periodLayer = function(period, options) {
+    var map = config.url();
+    return new PeriodLayer(map, {
+        p: period,
+        attribution: config.attribution,
+        maxZoom: 9,
+        reuseTiles: true,
+        detectRetina: Atlastory._options.detectRetina
+    });
+};
+
+exports.addPeriod = function(period, options) {
+    if (!period.id || isNaN(parseFloat(period.id)))
+        return console.error("Atlastory#addPeriod: Period is missing an ID number.");
+    if (!period.start_year || !period.end_year)
+        return console.error("Atlastory#addPeriod: Period is missing start or end year.");
+
+    options = options || {};
+
+    period = new Period(period);
+    exports.periods.push(period);
+    Atlastory.trigger("period:add", { period: period });
+};
+
+function isBefore(year, before) {
+    before = time.dateToYear(before);
+    return (year <= before);
+}
+
+function isAfter(year, after) {
+    after = time.dateToYear(after);
+    return (year > after);
+}
+
+exports.getPeriodByYear = function(year) {
+    var per, p;
+
+    for (p in exports.periods) {
+        per = exports.periods[p];
+        if (isAfter(year, per.start()) && isBefore(year, per.end())) {
+            return per;
+        }
+    }
+
+    return false;
+};
+
+exports._dateToYear = time.dateToYear;
+
+},{"./config":3,"./time":8}],7:[function(require,module,exports){
+
+var _date = /-?\b\d+(-|\/)(0[1-9]|1[0-2])(-|\/)(0[1-9]|[1-2][0-9]|3[0-1])\b/,
+    _year = /-?\d+/;
+
+var Query = function(query) {
+    var qInt, date;
+
+    query = '' + query;
+    this.query = query = query.replace(/^[\s\t\r\n]+|[\s\t\r\n]+$/g, '');
+
+    this.status = 'unknown';
+    this.error = '';
+
+    qInt = parseFloat(query);
+
+    var isNumber = !isNaN(qInt),
+        thisYear = new Date().getFullYear(),
+        isDate = (_date.test(query) && qInt < thisYear),
+        isYear = (!isDate && _year.test(query) && qInt < thisYear);
+
+    try {
+        // Single date
+        if (isDate || isYear) this.date();
+        // Date range
+        // Coordinates
+        // x/y/z
+        // Location name
+        // Commands
+    } catch(err) {
+        this.error = err;
+        this.status = 'failure ('+err+')';
+    }
+};
+
+var fn = Query.prototype;
+
+// Single date
+fn.date = function(date) {
+    date = date || this.query;
+    date = _date.test(date) ? date : parseFloat(date);
+    Atlastory.time.set(date);
+
+    this.status = 'success';
+};
+
+module.exports = function(query) {
+    query = new Query(query);
+    return 'query "' + query.query + '" ' + query.status;
+};
+
+},{}],8:[function(require,module,exports){
+var Events = require('./vendor/Atlastory.Events');
+
+var Time = function(time, zoom) {
+    this.date = (typeof time === 'number') ? time : 1940;
+    this.zoom = (typeof time === 'number') ? zoom : 2;
+};
+
+Events.apply(Time);
+
+var months = ["Jan.", "Feb.", "Mar.", "Apr.", "May", "Jun.", "Jul.", "Aug.", "Sep.", "Oct.", "Nov.", "Dec."];
+
+Time.prototype.set = function(date) {
+    if (typeof date === 'string') this.date = this.dateToYear(date);
+    else if (typeof date == 'number') this.date = date;
+    else if (date && date.date || date && date.zoom) {
+        if (date.date) this.date = date.date;
+        if (date.zoom) this.zoom = date.zoom;
+    }
+    else console.error("Date must be a string or number.");
+
+    this.trigger("change");
+};
+
+Time.prototype.get = function() {
+    return this.date;
+};
+
+// Converts date string to year fraction
+Time.prototype.dateToYear = function(string) {
+    if (!string) return;
+
+    var arr, day, month, year;
+
+    string = string.replace(/[\s\t\r\n]/g, '');
+    arr = string.split("-");
+    // Allow both '-' and '/' seperators
+    if (arr.length == 1 && /\//.test(string)) arr = string.split('/');
+    // Account for negative years
+    if (arr.length == 4 && arr[0] === '') { arr.shift(); arr[0] = '-'+arr[0]; }
+
+    day = parseFloat(arr[2]);
+    month = (parseFloat(arr[1]) - 1) * 30.4375;
+    year = parseFloat(arr[0]);
+
+    return year + (month + day) / 365.25;
+};
+
+// Converts year fraction to date string
+Time.prototype.yearToDate = function(yearFrac) {
+    var year = Math.floor(yearFrac),
+        month = Math.floor((yearFrac - year) * 12) + 1,
+        day = Math.floor((yearFrac - year) * 365.25 - month * 30.4375);
+
+    if (month < 10) month = '0' + month;
+
+    return year + '-' + month + '-' + day;
+};
+
+// gets the month of a 'year fraction'
+Time.prototype.monthString = function(year) {
+    return months[Math.floor((year - Math.floor(year)) * 12)];
+};
+
+module.exports = Time;
+
+},{"./vendor/Atlastory.Events":11}],9:[function(require,module,exports){
+var Events = require('./vendor/Atlastory.Events'),
+    Time = require('./time');
+
+var hasTouch = window.Atlastory.Browser.touch;
+if (hasTouch) require('./vendor/jQuery.finger');
+
+require('./vendor/jQuery.plugins');
+
+var zoomLevels = {
+    0: {scale: 100, interval: 90},
+    1: {scale: 25,  interval: 80},
+    2: {scale: 10,  interval: 70},
+    3: {scale: 5,   interval: 65},
+    4: {scale: 1,   interval: 60}
+};
+
+var Timeline = function(time, zoom) {
+    this._zoom = 0;
+    this._interval = 0;
+    this._visibleMarks = 0;
+    this._startYear = 0;
+    this._sliderPos = 0;
+    this._map = Atlastory.map;
+    this._container = Atlastory._container;
+
+    Atlastory.time = new Time(time, zoom || 2);
+
+    // Trigger update whenever date is updated externally
+    this.on("change", this.change, this);
+    Atlastory.time.on("change", this.create, this);
+    this._map.on("resize", this.resize, this);
+
+    this.initialize();
+    this.initPeriods();
+};
+
+var fn = Timeline.prototype;
+
+Events.apply(Timeline);
+
+fn.initialize = function() {
+    this.$timeline = $('<div class="timeline"/>');
+    this.$timeline.appendTo(this._container);
+    this.buildDOM();
+
+    // UI interaction events
+    if (hasTouch) this.$scale.on("tap doubletap", this.moveToDate.bind(this));
+    else this.$scale.on("dblclick", this.moveToDate.bind(this));
+    this.$slider.drag({
+        constraint: "x",
+        xbounds: [0, 1000],
+        dragClass: "drag",
+        onStop: this.stop.bind(this),
+        onDrag: this.drag.bind(this)
+    });
+
+    this.create();
+    this.$timeline.css("visibility", "visible");
+};
+
+fn.buildDOM = function() {
+    var $tl = this.$timeline;
+
+    $tl.empty();
+    $tl.html('<div class="box">' +
+        '<div class="container">' +
+            '<div class="timescale">' +
+                '<div class="time"></div>' +
+            '</div>' +
+        '</div>' +
+        '<div class="slider">' +
+            '<div class="top"></div>' +
+            '<div class="selection"><span></span></div>' +
+            '<div class="label"></div>' +
+        '</div>' +
+    '</div>');
+
+    this.$container = $('.timeline .container');
+    this.$scale = $('.timeline .timescale');
+    this.$slider = $('.timeline .slider');
+};
+
+// Updates timeline based on external change in data
+fn.create = function(mode) {
+    var zoomLvl  = Atlastory.time.zoom,
+        date     = Atlastory.time.date,
+        winWidth = $(this._container).width(),
+        lastIntv = this._interval,
+        intv, left;
+
+    this._zoom = zoomLvl;
+    intv = this._interval = zoomLevels[zoomLvl].interval;
+    this._visibleMarks = Math.ceil(winWidth / intv);
+
+    this.$slider.width(intv);
+
+    if (mode == 'zoom') {
+        left = this.$slider.position().left - (intv - lastIntv)/2;
+        if (left < 0) left = 0;
+        this.resize({ slide: left });
+    } else if (this._isInFuture()) {
+        left = this.$slider.position().left;
+        this.resize({ slide: left });
+    } else {
+        this.resize();
+    }
+};
+
+// Renders timeline based on slider, zoom, dates
+fn.render = function(slideX, date, fx) {
+    var $scale = this.$scale,
+        intv = this._interval,
+        visM = this._visibleMarks,
+        marks = visM * 5,
+        z = zoomLevels[this._zoom].scale,
+        dateStart, yearMark, startYear, sliderPos, newLeft;
+
+    date = date || Atlastory.time.date;
+    dateStart = date - z / 2;
+    yearMark = Math.round(dateStart / z) * z;
+    startYear = yearMark - visM * z * 2;
+
+    this._startYear = startYear;
+    $scale.width(visM * intv * 5);
+
+    // Creates timeline visuals
+    var $labels = $('<div class="layer"/>'),
+        $major  = $('<div class="layer"/>');
+    for (var i=0; i<marks; i++) {
+        var year = startYear + i * z;
+        if (year < new Date().getFullYear()) {
+            $('<div class="label"/>').css("left", intv*i)
+                .html(year === 0 ? "0" : year).appendTo($labels);
+            $('<div class="major"/>').css("left", intv*i).appendTo($major);
+        }
+    }
+    $(".time", $scale).empty().append($labels, $major);
+
+    // Moves scale to current position
+    sliderPos = slideX || this.$slider.position().left;
+    newLeft = -(dateStart - startYear)/z * intv + sliderPos;
+    this._sliderPos = sliderPos;
+    $scale.css("left", newLeft);
+
+    // Make sure timeline stops at current year
+    if (this._isInFuture()) {
+        newLeft = -(this._yearInPx() - this.$timeline.width());
+        $scale.css("left", newLeft);
+        this.$slider.css("left", this._yearInPx(date) + newLeft - intv/2);
+    }
+
+    // Feeds back new numbers for jQuery animate
+    if (fx) {
+        var adjust  = newLeft - fx.now;
+        fx.now = newLeft;
+        fx.start = fx.start + adjust;
+        fx.end = fx.end + adjust;
+    }
+
+    var selectMonth = this._zoom >= 3 ? Atlastory.time.monthString(date) + " " : "";
+    $(".label", this.$slider).html(selectMonth + Math.floor(date));
+
+    this.trigger("render");
+};
+
+fn._yearInPx = function(year) {
+    year = year || new Date().getFullYear();
+    return (year - this._startYear) /
+        zoomLevels[this._zoom].scale * this._interval;
+};
+
+fn._isInFuture = function() {
+    var fromLeft = this._yearInPx() + this.$scale.position().left;
+    return (fromLeft <= this.$timeline.outerWidth());
+};
+
+// Updates date range data whenever timeline is changed:
+fn.change = function() {
+    var $scale = this.$scale,
+        $slider = this.$slider,
+        intv = this._interval,
+        z = zoomLevels[this._zoom].scale,
+        startYear = this._startYear,
+        slideX = $slider.position().left - $scale.position().left,
+        date = ((slideX + $slider.width()/2) / intv) * z + startYear;
+
+    var selectMonth = this._zoom >= 3 ? Atlastory.time.monthString(date) + " " : "";
+    $(".label", $slider).html(selectMonth + Math.floor(date));
+
+    Atlastory.time.date = date;
+    Atlastory.time.zoom = this._zoom;
+};
+
+// Shifts the timescale when slider is dragged
+fn.drag = function(e, ui) {
+    this.trigger("change");
+
+    var width = this.$timeline.outerWidth(),
+        slWidth = this.$slider.width(),
+        left = ui.left,
+        right = slWidth + left,
+        z = zoomLevels[this._zoom].scale,
+        self = this;
+
+    // Stops the animation if user reverses slider direction
+    if (left < 0.5 * width && this._sliderPos <= left ||
+        left > 0.5 * width && this._sliderPos >= left) {
+        this.$scale._stop().clearQueue();
+        this._sliderPos = left;
+        return false;
+    }
+    this._sliderPos = (left < 0.5 * width) ? left + 3 : left - 3;
+
+    // Stops animation if timeline ends
+    if (this._isInFuture() && this._sliderPos <= left) {
+        this.$scale._stop().clearQueue();
+        this._sliderPos = left;
+        return false;
+    }
+
+    // Decides how fast animation should be
+    var startTime   = 3000,
+        endTime     = 800,
+        bounds      = 0.2,
+        timeDelta   = startTime - endTime,
+        totalDur    = timeDelta/bounds,
+        leftTime    = totalDur*(left/width) + endTime,
+        rightTime   = totalDur - totalDur*(right/width) + endTime;
+
+    // Timeline left/right animation
+    if (leftTime < startTime)
+        this.$scale._animate({ left:'+=500' }, {
+            duration: leftTime, easing: "linear", step: reRender.bind(this)
+        });
+    if (rightTime < startTime)
+        this.$scale._animate({ left:'-=500' }, {
+            duration: rightTime, easing: "linear", step: reRender.bind(this)
+        });
+
+    // Checks if user is near timescale boundaries, re-renders if so:
+    function reRender(now, fx) {
+        var reloadBuff = this._visibleMarks/2,
+            intv    = this._interval,
+            scLeft      = now,
+            scRight     = this.$scale.width() + scLeft - this.$container.width(),
+            left        = ui.left,
+            right       = slWidth + left,
+            date        = ((left-scLeft+slWidth/2)/intv)*z + this._startYear,
+            leftTime    = totalDur*(left/width) + endTime,
+            rightTime   = totalDur - totalDur*(right/width) + endTime;
+
+        if (this._isInFuture()) this.stop();
+
+        if (left < 0.5 * width) fx.options.duration = leftTime;
+                           else fx.options.duration = rightTime;
+
+        if (scLeft > (-intv * reloadBuff) || scRight < (intv * reloadBuff))
+            this.render(left, date, fx);
+    }
+};
+
+fn.stop = function(e,ui){
+    this.$scale.clearQueue()._stop();
+    this.trigger("change");
+};
+
+fn.moveToDate = function(e){
+    var x = e.clientX || e.x,
+        left   = x - this.$timeline.position().left,
+        width  = this.$slider.width(),
+        newPos = left - width/2,
+        self   = this;
+
+    this.$slider.animate({ left: newPos }, 400, "swing", function(){
+        self.trigger("change");
+    });
+};
+
+fn.zoomIn = function(e, z) {
+    if (isNaN(z)) z = 1;
+    var lvl = this._zoom + z;
+    if (!zoomLevels[lvl]) return true;
+    Atlastory.time.set({ zoom: lvl });
+    this._zoom = lvl;
+    this.create("zoom");
+};
+
+fn.zoomOut = function(e, z){
+    if (isNaN(z)) z = -1;
+    var lvl = this._zoom + z;
+    if (!zoomLevels[lvl]) return true;
+    Atlastory.time.set({ zoom: lvl });
+    this._zoom = lvl;
+    this.create("zoom");
+};
+
+fn.resize = function(data) {
+    var width, slideX;
+
+    width = (data && data.newSize) ? data.newSize.x : $(this._container).width();
+    slideX = (data && data.slide) ? data.slide : width/2 - this._interval/2; // Centers slider
+
+    this.$container.width(width);
+    this.$scale.width(this._visibleMarks * this._interval * 5);
+    this.$slider.css('left', slideX).dragUpdate({
+        //snap: [this._interval/(zoomLevels[this._zoom].scale * 12), 1],
+        xbounds: [-this._interval / 2, width + this._interval / 2]
+    });
+
+    this.trigger("resize");
+    this.render();
+};
+
+module.exports = Timeline;
+
+},{"./time":8,"./vendor/Atlastory.Events":11,"./vendor/jQuery.finger":12,"./vendor/jQuery.plugins":13}],10:[function(require,module,exports){
+var Period = require('./period');
+
+module.exports = function(fn) {
+
+fn.initPeriods = function(timeline) {
+    this.$periods = $('<div class="time periods"/>');
+    this.$periods.appendTo(this.$scale);
+
+    Atlastory.on("period:add period:remove", this.renderPeriods, this);
+    this.on({
+        "render": this.renderPeriods,
+        "change": this.renderMap
+    }, this);
+};
+
+fn.renderPeriods = function() {
+    var per, p, left, right, lastColor;
+
+    lastColor = 0;
+
+    function pickColor() {
+        var colors = [
+            "atlastory-magenta",
+            "atlastory-orange",
+            "atlastory-yellow",
+            "atlastory-lime",
+            "atlastory-green"
+        ];
+        if (lastColor == colors.length - 1) lastColor = 0;
+        return colors[lastColor++];
+    }
+
+    // Creates period ribbons on timeline
+    var $ribbons = $('<div class="layer"/>');
+    for (p in Period.periods) {
+        per = Period.periods[p];
+        left = this._yearInPx(Period._dateToYear(per.start()));
+        right = this._yearInPx(Period._dateToYear(per.end()));
+        $('<div class="ribbon"/>').css("left", left)
+            .toggleClass("blue", !Atlastory._options.rainbow)
+            .toggleClass(pickColor(), Atlastory._options.rainbow)
+            .width(right - left).appendTo($ribbons);
+    }
+
+    this.$periods.empty().append($ribbons);
+
+    // Render map with current periods
+    this.renderMap();
+};
+
+fn.renderMap = function() {
+    var year = Atlastory.time.get(),
+        period = Period.getPeriodByYear(year);
+
+    if (period) {
+    // If there's a period, show it
+        if (period._preload) period.mapLayer.bringToFront();
+        else if (!Atlastory.layers.hasLayer(period.mapLayer)) {
+            Atlastory.layers.clearLayers()
+                .addLayer(period.mapLayer);
+        }
+    } else {
+    // If there aren't any periods, show only blank map
+        var blank = Atlastory._blankLayer;
+        if (period._preload) blank.bringToFront();
+        else if (!Atlastory.layers.hasLayer(blank)) Atlastory.layers.clearLayers()
+            .addLayer(blank);
+    }
+};
+
+};
+
+},{"./period":6}],11:[function(require,module,exports){
 // Adapted from Leaflet Events
 
 var Avents = {};
@@ -220,35 +965,7 @@ Avents.Events.fire = Avents.Events.trigger;
 
 module.exports = Avents;
 
-},{}],3:[function(require,module,exports){
-// Hardcode image path
-window.L.Icon.Default.imagePath = 'http://img.atlastory.com/Atlastory.js/v1';
-
-var Atlastory = {},
-    Period = require('./period'),
-    Events = require('./Atlastory.Events');
-
-Events.apply(Atlastory);
-
-Atlastory.VERSION = require('../package.json').version;
-Atlastory.map = require('./map');
-
-Atlastory.periodLayer = Period.periodLayer;
-Atlastory.addPeriod = Period.addPeriod;
-
-Atlastory.hash = L.hash;
-
-//marker
-//gridControl
-//gridLayer
-//featureLayer
-
-Atlastory.Util = {};
-Atlastory.Browser = L.Browser;
-
-window.Atlastory = module.exports = Atlastory;
-
-},{"../package.json":15,"./Atlastory.Events":2,"./map":7,"./period":8}],4:[function(require,module,exports){
+},{}],12:[function(require,module,exports){
 /*
  * jquery.finger
  * https://github.com/ngryman/jquery.finger
@@ -397,7 +1114,7 @@ window.Atlastory = module.exports = Atlastory;
 
 })(jQuery, navigator.userAgent);
 
-},{}],5:[function(require,module,exports){
+},{}],13:[function(require,module,exports){
 (function($) {
 
     // Gets mouse position for all browsers
@@ -423,7 +1140,7 @@ window.Atlastory = module.exports = Atlastory;
     };
 
     $(function(){
-        $(window).bind("mousemove touchmove", Mouse.init);
+        $(window).on("mousemove touchmove", Mouse.init);
     });
 
     // Prevents selection
@@ -1127,610 +1844,657 @@ window.Atlastory = module.exports = Atlastory;
 
 })(jQuery);
 
-},{}],6:[function(require,module,exports){
+},{}],14:[function(require,module,exports){
 window.L = require('leaflet/dist/leaflet-src');
 require('leaflet-hash/leaflet-hash');
 
-},{"leaflet-hash/leaflet-hash":13,"leaflet/dist/leaflet-src":14}],7:[function(require,module,exports){
-var Timeline = require('./timeline'),
-    TimelinePeriods = require('./timeline.periods'),
-    url = require('./url');
+},{"leaflet-hash/leaflet-hash":17,"leaflet/dist/leaflet-src":18}],15:[function(require,module,exports){
+/* ========================================================================
+ * Bootstrap: modal.js v3.1.1
+ * http://getbootstrap.com/javascript/#modals
+ * ========================================================================
+ * Copyright 2011-2014 Twitter, Inc.
+ * Licensed under MIT (https://github.com/twbs/bootstrap/blob/master/LICENSE)
+ * ======================================================================== */
 
-var Map = L.Map;
 
-TimelinePeriods(Timeline.prototype);
++function ($) {
+  'use strict';
 
-module.exports = function(id, time, options) {
-    var mapEl, mapViewEl;
+  // MODAL CLASS DEFINITION
+  // ======================
 
-    mapEl = document.getElementById(id);
-    mapViewEl = document.createElement('div');
+  var Modal = function (element, options) {
+    this.options   = options
+    this.$element  = $(element)
+    this.$backdrop =
+    this.isShown   = null
 
-    mapViewEl.setAttribute('id', 'mapView');
-    mapEl.className = 'atlastory-map';
-    mapEl.appendChild(mapViewEl);
+    if (this.options.remote) {
+      this.$element
+        .find('.modal-content')
+        .load(this.options.remote, $.proxy(function () {
+          this.$element.trigger('loaded.bs.modal')
+        }, this))
+    }
+  }
 
-    // Set default options
-    var o = L.Util.extend({
-        preload: false,
-        timezoom: 2,
-        rainbow: true,
-        detectRetina: false
-    }, options);
+  Modal.DEFAULTS = {
+    backdrop: true,
+    keyboard: true,
+    show: true
+  }
 
-    var map = Atlastory.map = new Map('mapView', {
-        zoom: 3,
-        center: [20.72, -22.41],
-        zoomControl: false,
-        inertia: true
-    });
+  Modal.prototype.toggle = function (_relatedTarget) {
+    return this[!this.isShown ? 'show' : 'hide'](_relatedTarget)
+  }
 
-    new L.Control.Zoom({ position: 'bottomleft' }).addTo(map);
+  Modal.prototype.show = function (_relatedTarget) {
+    var that = this
+    var e    = $.Event('show.bs.modal', { relatedTarget: _relatedTarget })
 
-    Atlastory._blankLayer = new L.TileLayer(url.blankmap, {
-        maxZoom: 9,
-        reuseTiles: true,
-        detectRetina: o.detectRetina
-    });
-    Atlastory.layers = new L.LayerGroup().addTo(map);
-    if (o.preload) Atlastory.layers.addLayer(Atlastory._blankLayer);
+    this.$element.trigger(e)
 
-    Atlastory._container = mapEl;
-    Atlastory._options = o;
-    Atlastory.timeline = new Timeline(time, o.timezoom);
+    if (this.isShown || e.isDefaultPrevented()) return
 
-    return map;
-};
+    this.isShown = true
 
-},{"./timeline":10,"./timeline.periods":11,"./url":12}],8:[function(require,module,exports){
-var url = require('./url'),
-    Time = require('./time');
+    this.escape()
 
-var PeriodLayer = L.TileLayer;
-var time = new Time();
+    this.$element.on('click.dismiss.bs.modal', '[data-dismiss="modal"]', $.proxy(this.hide, this))
 
-exports.periods = [];
+    this.backdrop(function () {
+      var transition = $.support.transition && that.$element.hasClass('fade')
 
-var Period = function(data) {
-    this.id = data.id;
-    this.start_year = data.start_year;
-    this.start_month = data.start_month || 1;
-    this.start_day = data.start_day || 1;
-    this.end_year = data.end_year;
-    this.end_month = data.end_month || 1;
-    this.end_day = data.end_day || 1;
-    this._preload = Atlastory._options.preload;
+      if (!that.$element.parent().length) {
+        that.$element.appendTo(document.body) // don't move modals dom position
+      }
 
-    this.mapLayer = exports.periodLayer(this.id);
-    if (this._preload) Atlastory.layers.addLayer(this.mapLayer);
-};
+      that.$element
+        .show()
+        .scrollTop(0)
 
-Period.prototype.start = function() {
-    return this.start_year + '-' +
-           this.start_month + '-' +
-           this.start_day;
-};
+      if (transition) {
+        that.$element[0].offsetWidth // force reflow
+      }
 
-Period.prototype.end = function() {
-    return this.end_year + '-' +
-           this.end_month + '-' +
-           this.end_day;
-};
+      that.$element
+        .addClass('in')
+        .attr('aria-hidden', false)
 
-exports.periodLayer = function(period, options) {
-    var map = url.url();
-    return new PeriodLayer(map, {
-        p: period,
-        attribution: '&copy; <a href="http://www.atlastory.com/">Atlastory</a> contributors',
-        maxZoom: 9,
-        reuseTiles: true,
-        detectRetina: Atlastory._options.detectRetina
-    });
-};
+      that.enforceFocus()
 
-exports.addPeriod = function(period, options) {
-    if (!period.id || isNaN(parseFloat(period.id)))
-        return console.error("Atlastory#addPeriod: Period is missing an ID number.");
-    if (!period.start_year || !period.end_year)
-        return console.error("Atlastory#addPeriod: Period is missing start or end year.");
+      var e = $.Event('shown.bs.modal', { relatedTarget: _relatedTarget })
 
-    options = options || {};
+      transition ?
+        that.$element.find('.modal-dialog') // wait for modal to slide in
+          .one($.support.transition.end, function () {
+            that.$element.trigger('focus').trigger(e)
+          })
+          .emulateTransitionEnd(300) :
+        that.$element.trigger('focus').trigger(e)
+    })
+  }
 
-    period = new Period(period);
-    exports.periods.push(period);
-    Atlastory.trigger("period:add", { period: period });
-};
+  Modal.prototype.hide = function (e) {
+    if (e) e.preventDefault()
 
-function isBefore(year, before) {
-    before = time.dateToYear(before);
-    return (year <= before);
-}
+    e = $.Event('hide.bs.modal')
 
-function isAfter(year, after) {
-    after = time.dateToYear(after);
-    return (year > after);
-}
+    this.$element.trigger(e)
 
-exports.getPeriodByYear = function(year) {
-    var per, p;
+    if (!this.isShown || e.isDefaultPrevented()) return
 
-    for (p in exports.periods) {
-        per = exports.periods[p];
-        if (isAfter(year, per.start()) && isBefore(year, per.end())) {
-            return per;
+    this.isShown = false
+
+    this.escape()
+
+    $(document).off('focusin.bs.modal')
+
+    this.$element
+      .removeClass('in')
+      .attr('aria-hidden', true)
+      .off('click.dismiss.bs.modal')
+
+    $.support.transition && this.$element.hasClass('fade') ?
+      this.$element
+        .one($.support.transition.end, $.proxy(this.hideModal, this))
+        .emulateTransitionEnd(300) :
+      this.hideModal()
+  }
+
+  Modal.prototype.enforceFocus = function () {
+    $(document)
+      .off('focusin.bs.modal') // guard against infinite focus loop
+      .on('focusin.bs.modal', $.proxy(function (e) {
+        if (this.$element[0] !== e.target && !this.$element.has(e.target).length) {
+          this.$element.trigger('focus')
         }
+      }, this))
+  }
+
+  Modal.prototype.escape = function () {
+    if (this.isShown && this.options.keyboard) {
+      this.$element.on('keyup.dismiss.bs.modal', $.proxy(function (e) {
+        e.which == 27 && this.hide()
+      }, this))
+    } else if (!this.isShown) {
+      this.$element.off('keyup.dismiss.bs.modal')
+    }
+  }
+
+  Modal.prototype.hideModal = function () {
+    var that = this
+    this.$element.hide()
+    this.backdrop(function () {
+      that.removeBackdrop()
+      that.$element.trigger('hidden.bs.modal')
+    })
+  }
+
+  Modal.prototype.removeBackdrop = function () {
+    this.$backdrop && this.$backdrop.remove()
+    this.$backdrop = null
+  }
+
+  Modal.prototype.backdrop = function (callback) {
+    var animate = this.$element.hasClass('fade') ? 'fade' : ''
+
+    if (this.isShown && this.options.backdrop) {
+      var doAnimate = $.support.transition && animate
+
+      this.$backdrop = $('<div class="modal-backdrop ' + animate + '" />')
+        .appendTo(document.body)
+
+      this.$element.on('click.dismiss.bs.modal', $.proxy(function (e) {
+        if (e.target !== e.currentTarget) return
+        this.options.backdrop == 'static'
+          ? this.$element[0].focus.call(this.$element[0])
+          : this.hide.call(this)
+      }, this))
+
+      if (doAnimate) this.$backdrop[0].offsetWidth // force reflow
+
+      this.$backdrop.addClass('in')
+
+      if (!callback) return
+
+      doAnimate ?
+        this.$backdrop
+          .one($.support.transition.end, callback)
+          .emulateTransitionEnd(150) :
+        callback()
+
+    } else if (!this.isShown && this.$backdrop) {
+      this.$backdrop.removeClass('in')
+
+      $.support.transition && this.$element.hasClass('fade') ?
+        this.$backdrop
+          .one($.support.transition.end, callback)
+          .emulateTransitionEnd(150) :
+        callback()
+
+    } else if (callback) {
+      callback()
+    }
+  }
+
+
+  // MODAL PLUGIN DEFINITION
+  // =======================
+
+  var old = $.fn.modal
+
+  $.fn.modal = function (option, _relatedTarget) {
+    return this.each(function () {
+      var $this   = $(this)
+      var data    = $this.data('bs.modal')
+      var options = $.extend({}, Modal.DEFAULTS, $this.data(), typeof option == 'object' && option)
+
+      if (!data) $this.data('bs.modal', (data = new Modal(this, options)))
+      if (typeof option == 'string') data[option](_relatedTarget)
+      else if (options.show) data.show(_relatedTarget)
+    })
+  }
+
+  $.fn.modal.Constructor = Modal
+
+
+  // MODAL NO CONFLICT
+  // =================
+
+  $.fn.modal.noConflict = function () {
+    $.fn.modal = old
+    return this
+  }
+
+
+  // MODAL DATA-API
+  // ==============
+
+  $(document).on('click.bs.modal.data-api', '[data-toggle="modal"]', function (e) {
+    var $this   = $(this)
+    var href    = $this.attr('href')
+    var $target = $($this.attr('data-target') || (href && href.replace(/.*(?=#[^\s]+$)/, ''))) //strip for ie7
+    var option  = $target.data('bs.modal') ? 'toggle' : $.extend({ remote: !/#/.test(href) && href }, $target.data(), $this.data())
+
+    if ($this.is('a')) e.preventDefault()
+
+    $target
+      .modal(option, this)
+      .one('hide', function () {
+        $this.is(':visible') && $this.trigger('focus')
+      })
+  })
+
+  $(document)
+    .on('show.bs.modal', '.modal', function () { $(document.body).addClass('modal-open') })
+    .on('hidden.bs.modal', '.modal', function () { $(document.body).removeClass('modal-open') })
+
+}(jQuery);
+
+},{}],16:[function(require,module,exports){
+/* ========================================================================
+ * Bootstrap: tooltip.js v3.1.1
+ * http://getbootstrap.com/javascript/#tooltip
+ * Inspired by the original jQuery.tipsy by Jason Frame
+ * ========================================================================
+ * Copyright 2011-2014 Twitter, Inc.
+ * Licensed under MIT (https://github.com/twbs/bootstrap/blob/master/LICENSE)
+ * ======================================================================== */
+
+
++function ($) {
+  'use strict';
+
+  // TOOLTIP PUBLIC CLASS DEFINITION
+  // ===============================
+
+  var Tooltip = function (element, options) {
+    this.type       =
+    this.options    =
+    this.enabled    =
+    this.timeout    =
+    this.hoverState =
+    this.$element   = null
+
+    this.init('tooltip', element, options)
+  }
+
+  Tooltip.DEFAULTS = {
+    animation: true,
+    placement: 'top',
+    selector: false,
+    template: '<div class="tooltip"><div class="tooltip-arrow"></div><div class="tooltip-inner"></div></div>',
+    trigger: 'hover focus',
+    title: '',
+    delay: 0,
+    html: false,
+    container: false
+  }
+
+  Tooltip.prototype.init = function (type, element, options) {
+    this.enabled  = true
+    this.type     = type
+    this.$element = $(element)
+    this.options  = this.getOptions(options)
+
+    var triggers = this.options.trigger.split(' ')
+
+    for (var i = triggers.length; i--;) {
+      var trigger = triggers[i]
+
+      if (trigger == 'click') {
+        this.$element.on('click.' + this.type, this.options.selector, $.proxy(this.toggle, this))
+      } else if (trigger != 'manual') {
+        var eventIn  = trigger == 'hover' ? 'mouseenter' : 'focusin'
+        var eventOut = trigger == 'hover' ? 'mouseleave' : 'focusout'
+
+        this.$element.on(eventIn  + '.' + this.type, this.options.selector, $.proxy(this.enter, this))
+        this.$element.on(eventOut + '.' + this.type, this.options.selector, $.proxy(this.leave, this))
+      }
     }
 
-    return false;
-};
+    this.options.selector ?
+      (this._options = $.extend({}, this.options, { trigger: 'manual', selector: '' })) :
+      this.fixTitle()
+  }
 
-exports._dateToYear = time.dateToYear;
+  Tooltip.prototype.getDefaults = function () {
+    return Tooltip.DEFAULTS
+  }
 
-},{"./time":9,"./url":12}],9:[function(require,module,exports){
-var Events = require('./Atlastory.Events');
+  Tooltip.prototype.getOptions = function (options) {
+    options = $.extend({}, this.getDefaults(), this.$element.data(), options)
 
-var Time = function(time, zoom) {
-    this.date = (typeof time === 'number') ? time : 1940;
-    this.zoom = (typeof time === 'number') ? zoom : 2;
-};
-
-Events.apply(Time);
-
-var months = ["Jan.", "Feb.", "Mar.", "Apr.", "May", "Jun.", "Jul.", "Aug.", "Sep.", "Oct.", "Nov.", "Dec."];
-
-Time.prototype.set = function(date) {
-    if (typeof date === 'string') this.date = this.dateToYear(date);
-    else if (typeof date == 'number') this.date = date;
-    else if (date && date.date || date && date.zoom) {
-        if (date.date) this.date = date.date;
-        if (date.zoom) this.zoom = date.zoom;
+    if (options.delay && typeof options.delay == 'number') {
+      options.delay = {
+        show: options.delay,
+        hide: options.delay
+      }
     }
-    else console.error("Date must be a string or number.");
 
-    this.trigger("change");
-};
+    return options
+  }
 
-Time.prototype.get = function() {
-    return this.date;
-};
+  Tooltip.prototype.getDelegateOptions = function () {
+    var options  = {}
+    var defaults = this.getDefaults()
 
-// Converts date string to year fraction
-Time.prototype.dateToYear = function(string) {
-    if (string !== null) {
-        var arr     = string.split("-"),
-            day     = parseFloat(arr[2]),
-            month   = (parseFloat(arr[1]) - 1) * 30.4375,
-            year    = parseFloat(arr[0]);
-        return year + (month + day) / 365.25;
+    this._options && $.each(this._options, function (key, value) {
+      if (defaults[key] != value) options[key] = value
+    })
+
+    return options
+  }
+
+  Tooltip.prototype.enter = function (obj) {
+    var self = obj instanceof this.constructor ?
+      obj : $(obj.currentTarget)[this.type](this.getDelegateOptions()).data('bs.' + this.type)
+
+    clearTimeout(self.timeout)
+
+    self.hoverState = 'in'
+
+    if (!self.options.delay || !self.options.delay.show) return self.show()
+
+    self.timeout = setTimeout(function () {
+      if (self.hoverState == 'in') self.show()
+    }, self.options.delay.show)
+  }
+
+  Tooltip.prototype.leave = function (obj) {
+    var self = obj instanceof this.constructor ?
+      obj : $(obj.currentTarget)[this.type](this.getDelegateOptions()).data('bs.' + this.type)
+
+    clearTimeout(self.timeout)
+
+    self.hoverState = 'out'
+
+    if (!self.options.delay || !self.options.delay.hide) return self.hide()
+
+    self.timeout = setTimeout(function () {
+      if (self.hoverState == 'out') self.hide()
+    }, self.options.delay.hide)
+  }
+
+  Tooltip.prototype.show = function () {
+    var e = $.Event('show.bs.' + this.type)
+
+    if (this.hasContent() && this.enabled) {
+      this.$element.trigger(e)
+
+      if (e.isDefaultPrevented()) return
+      var that = this;
+
+      var $tip = this.tip()
+
+      this.setContent()
+
+      if (this.options.animation) $tip.addClass('fade')
+
+      var placement = typeof this.options.placement == 'function' ?
+        this.options.placement.call(this, $tip[0], this.$element[0]) :
+        this.options.placement
+
+      var autoToken = /\s?auto?\s?/i
+      var autoPlace = autoToken.test(placement)
+      if (autoPlace) placement = placement.replace(autoToken, '') || 'top'
+
+      $tip
+        .detach()
+        .css({ top: 0, left: 0, display: 'block' })
+        .addClass(placement)
+
+      this.options.container ? $tip.appendTo(this.options.container) : $tip.insertAfter(this.$element)
+
+      var pos          = this.getPosition()
+      var actualWidth  = $tip[0].offsetWidth
+      var actualHeight = $tip[0].offsetHeight
+
+      if (autoPlace) {
+        var $parent = this.$element.parent()
+
+        var orgPlacement = placement
+        var docScroll    = document.documentElement.scrollTop || document.body.scrollTop
+        var parentWidth  = this.options.container == 'body' ? window.innerWidth  : $parent.outerWidth()
+        var parentHeight = this.options.container == 'body' ? window.innerHeight : $parent.outerHeight()
+        var parentLeft   = this.options.container == 'body' ? 0 : $parent.offset().left
+
+        placement = placement == 'bottom' && pos.top   + pos.height  + actualHeight - docScroll > parentHeight  ? 'top'    :
+                    placement == 'top'    && pos.top   - docScroll   - actualHeight < 0                         ? 'bottom' :
+                    placement == 'right'  && pos.right + actualWidth > parentWidth                              ? 'left'   :
+                    placement == 'left'   && pos.left  - actualWidth < parentLeft                               ? 'right'  :
+                    placement
+
+        $tip
+          .removeClass(orgPlacement)
+          .addClass(placement)
+      }
+
+      var calculatedOffset = this.getCalculatedOffset(placement, pos, actualWidth, actualHeight)
+
+      this.applyPlacement(calculatedOffset, placement)
+      this.hoverState = null
+
+      var complete = function() {
+        that.$element.trigger('shown.bs.' + that.type)
+      }
+
+      $.support.transition && this.$tip.hasClass('fade') ?
+        $tip
+          .one($.support.transition.end, complete)
+          .emulateTransitionEnd(150) :
+        complete()
     }
-};
+  }
 
-// Converts year fraction to date string
-Time.prototype.yearToDate = function(yearFrac) {
-    var year = Math.floor(yearFrac),
-        month = Math.floor((yearFrac - year) * 12) + 1,
-        day = Math.floor((yearFrac - year) * 365.25 - month * 30.4375);
+  Tooltip.prototype.applyPlacement = function (offset, placement) {
+    var replace
+    var $tip   = this.tip()
+    var width  = $tip[0].offsetWidth
+    var height = $tip[0].offsetHeight
 
-    if (month < 10) month = '0' + month;
+    // manually read margins because getBoundingClientRect includes difference
+    var marginTop = parseInt($tip.css('margin-top'), 10)
+    var marginLeft = parseInt($tip.css('margin-left'), 10)
 
-    return year + '-' + month + '-' + day;
-};
+    // we must check for NaN for ie 8/9
+    if (isNaN(marginTop))  marginTop  = 0
+    if (isNaN(marginLeft)) marginLeft = 0
 
-// gets the month of a 'year fraction'
-Time.prototype.monthString = function(year) {
-    return months[Math.floor((year - Math.floor(year)) * 12)];
-};
+    offset.top  = offset.top  + marginTop
+    offset.left = offset.left + marginLeft
 
-module.exports = Time;
+    // $.fn.offset doesn't round pixel values
+    // so we use setOffset directly with our own function B-0
+    $.offset.setOffset($tip[0], $.extend({
+      using: function (props) {
+        $tip.css({
+          top: Math.round(props.top),
+          left: Math.round(props.left)
+        })
+      }
+    }, offset), 0)
 
-},{"./Atlastory.Events":2}],10:[function(require,module,exports){
-var Events = require('./Atlastory.Events'),
-    Time = require('./time');
+    $tip.addClass('in')
 
-var isChrome = /chrome/i.exec(navigator.userAgent),
-    isAndroid = /android/i.exec(navigator.userAgent),
-    hasTouch = 'ontouchstart' in window && !(isChrome && !isAndroid);
+    // check to see if placing tip in new offset caused the tip to resize itself
+    var actualWidth  = $tip[0].offsetWidth
+    var actualHeight = $tip[0].offsetHeight
 
-if (hasTouch) require('./jQuery.finger');
+    if (placement == 'top' && actualHeight != height) {
+      replace = true
+      offset.top = offset.top + height - actualHeight
+    }
 
-require('./jQuery.plugins');
+    if (/bottom|top/.test(placement)) {
+      var delta = 0
 
-var zoomLevels = {
-    0: {scale: 100, interval: 90},
-    1: {scale: 25,  interval: 80},
-    2: {scale: 10,  interval: 70},
-    3: {scale: 5,   interval: 65},
-    4: {scale: 1,   interval: 60}
-};
+      if (offset.left < 0) {
+        delta       = offset.left * -2
+        offset.left = 0
 
-var Timeline = function(time, zoom) {
-    this._zoom = 0;
-    this._interval = 0;
-    this._visibleMarks = 0;
-    this._startYear = 0;
-    this._sliderPos = 0;
-    this._map = Atlastory.map;
-    this._container = Atlastory._container;
+        $tip.offset(offset)
 
-    Atlastory.time = new Time(time, zoom || 2);
+        actualWidth  = $tip[0].offsetWidth
+        actualHeight = $tip[0].offsetHeight
+      }
 
-    // Trigger update whenever date is updated externally
-    this.on("change", this.change, this);
-    Atlastory.time.on("change", this.create, this);
-    this._map.on("resize", this.resize, this);
-
-    this.initialize();
-    this.initPeriods();
-};
-
-var fn = Timeline.prototype;
-
-Events.apply(Timeline);
-
-fn.initialize = function() {
-    this.$timeline = $('<div class="timeline"/>');
-    this.$timeline.appendTo(this._container);
-    this.buildDOM();
-
-    // UI interaction events
-    if (hasTouch) this.$scale.on("tap doubletap", this.moveToDate.bind(this));
-    else this.$scale.on("dblclick", this.moveToDate.bind(this));
-    this.$slider.drag({
-        constraint: "x",
-        xbounds: [0, 1000],
-        dragClass: "drag",
-        onStop: this.stop.bind(this),
-        onDrag: this.drag.bind(this)
-    });
-
-    this.create();
-    this.$timeline.css("visibility", "visible");
-};
-
-fn.buildDOM = function() {
-    var $tl = this.$timeline;
-
-    $tl.empty();
-    $tl.html('<div class="box">' +
-        '<div class="container">' +
-            '<div class="timescale">' +
-                '<div class="time"></div>' +
-            '</div>' +
-        '</div>' +
-        '<div class="slider">' +
-            '<div class="top"></div>' +
-            '<div class="selection"><span></span></div>' +
-            '<div class="label"></div>' +
-        '</div>' +
-    '</div>');
-
-    this.$container = $('.timeline .container');
-    this.$scale = $('.timeline .timescale');
-    this.$slider = $('.timeline .slider');
-};
-
-// Updates timeline based on external change in data
-fn.create = function(mode) {
-    var zoomLvl  = Atlastory.time.zoom,
-        date     = Atlastory.time.date,
-        winWidth = $(this._container).width(),
-        lastIntv = this._interval,
-        intv, left;
-
-    this._zoom = zoomLvl;
-    intv = this._interval = zoomLevels[zoomLvl].interval;
-    this._visibleMarks = Math.ceil(winWidth / intv);
-
-    this.$slider.width(intv);
-
-    if (mode == 'zoom') {
-        left = this.$slider.position().left - (intv - lastIntv)/2;
-        if (left < 0) left = 0;
-        this.resize({ slide: left });
-    } else if (this._isInFuture()) {
-        left = this.$slider.position().left;
-        this.resize({ slide: left });
+      this.replaceArrow(delta - width + actualWidth, actualWidth, 'left')
     } else {
-        this.resize();
-    }
-};
-
-// Renders timeline based on slider, zoom, dates
-fn.render = function(slideX, date, fx) {
-    var $scale = this.$scale,
-        intv = this._interval,
-        visM = this._visibleMarks,
-        marks = visM * 5,
-        z = zoomLevels[this._zoom].scale,
-        dateStart, yearMark, startYear, sliderPos, newLeft;
-
-    date = date || Atlastory.time.date;
-    dateStart = date - z / 2;
-    yearMark = Math.round(dateStart / z) * z;
-    startYear = yearMark - visM * z * 2;
-
-    this._startYear = startYear;
-    $scale.width(visM * intv * 5);
-
-    // Creates timeline visuals
-    var $labels = $('<div class="layer"/>'),
-        $major  = $('<div class="layer"/>');
-    for (var i=0; i<marks; i++) {
-        var year = startYear + i * z;
-        if (year < new Date().getFullYear()) {
-            $('<div class="label"/>').css("left", intv*i)
-                .html(year === 0 ? "0" : year).appendTo($labels);
-            $('<div class="major"/>').css("left", intv*i).appendTo($major);
-        }
-    }
-    $(".time", $scale).empty().append($labels, $major);
-
-    // Moves scale to current position
-    sliderPos = slideX || this.$slider.position().left;
-    newLeft = -(dateStart - startYear)/z * intv + sliderPos;
-    this._sliderPos = sliderPos;
-    $scale.css("left", newLeft);
-
-    // Make sure timeline stops at current year
-    if (this._isInFuture()) {
-        newLeft = -(this._yearInPx() - this.$timeline.width());
-        $scale.css("left", newLeft);
-        this.$slider.css("left", this._yearInPx(date) + newLeft - intv/2);
+      this.replaceArrow(actualHeight - height, actualHeight, 'top')
     }
 
-    // Feeds back new numbers for jQuery animate
-    if (fx) {
-        var adjust  = newLeft - fx.now;
-        fx.now = newLeft;
-        fx.start = fx.start + adjust;
-        fx.end = fx.end + adjust;
+    if (replace) $tip.offset(offset)
+  }
+
+  Tooltip.prototype.replaceArrow = function (delta, dimension, position) {
+    this.arrow().css(position, delta ? (50 * (1 - delta / dimension) + '%') : '')
+  }
+
+  Tooltip.prototype.setContent = function () {
+    var $tip  = this.tip()
+    var title = this.getTitle()
+
+    $tip.find('.tooltip-inner')[this.options.html ? 'html' : 'text'](title)
+    $tip.removeClass('fade in top bottom left right')
+  }
+
+  Tooltip.prototype.hide = function () {
+    var that = this
+    var $tip = this.tip()
+    var e    = $.Event('hide.bs.' + this.type)
+
+    function complete() {
+      if (that.hoverState != 'in') $tip.detach()
+      that.$element.trigger('hidden.bs.' + that.type)
     }
 
-    var selectMonth = this._zoom >= 3 ? Atlastory.time.monthString(date) + " " : "";
-    $(".label", this.$slider).html(selectMonth + Math.floor(date));
+    this.$element.trigger(e)
 
-    this.trigger("render");
-};
+    if (e.isDefaultPrevented()) return
 
-fn._yearInPx = function(year) {
-    year = year || new Date().getFullYear();
-    return (year - this._startYear) /
-        zoomLevels[this._zoom].scale * this._interval;
-};
+    $tip.removeClass('in')
 
-fn._isInFuture = function() {
-    var fromLeft = this._yearInPx() + this.$scale.position().left;
-    return (fromLeft <= this.$timeline.outerWidth());
-};
+    $.support.transition && this.$tip.hasClass('fade') ?
+      $tip
+        .one($.support.transition.end, complete)
+        .emulateTransitionEnd(150) :
+      complete()
 
-// Updates date range data whenever timeline is changed:
-fn.change = function() {
-    var $scale = this.$scale,
-        $slider = this.$slider,
-        intv = this._interval,
-        z = zoomLevels[this._zoom].scale,
-        startYear = this._startYear,
-        slideX = $slider.position().left - $scale.position().left,
-        date = ((slideX + $slider.width()/2) / intv) * z + startYear;
+    this.hoverState = null
 
-    var selectMonth = this._zoom >= 3 ? Atlastory.time.monthString(date) + " " : "";
-    $(".label", $slider).html(selectMonth + Math.floor(date));
+    return this
+  }
 
-    Atlastory.time.date = date;
-    Atlastory.time.zoom = this._zoom;
-};
-
-// Shifts the timescale when slider is dragged
-fn.drag = function(e, ui) {
-    this.trigger("change");
-
-    var width = this.$timeline.outerWidth(),
-        slWidth = this.$slider.width(),
-        left = ui.left,
-        right = slWidth + left,
-        z = zoomLevels[this._zoom].scale,
-        self = this;
-
-    // Stops the animation if user reverses slider direction
-    if (left < 0.5 * width && this._sliderPos <= left ||
-        left > 0.5 * width && this._sliderPos >= left) {
-        this.$scale._stop().clearQueue();
-        this._sliderPos = left;
-        return false;
+  Tooltip.prototype.fixTitle = function () {
+    var $e = this.$element
+    if ($e.attr('title') || typeof($e.attr('data-original-title')) != 'string') {
+      $e.attr('data-original-title', $e.attr('title') || '').attr('title', '')
     }
-    this._sliderPos = (left < 0.5 * width) ? left + 3 : left - 3;
+  }
 
-    // Stops animation if timeline ends
-    if (this._isInFuture() && this._sliderPos <= left) {
-        this.$scale._stop().clearQueue();
-        this._sliderPos = left;
-        return false;
+  Tooltip.prototype.hasContent = function () {
+    return this.getTitle()
+  }
+
+  Tooltip.prototype.getPosition = function () {
+    var el = this.$element[0]
+    return $.extend({}, (typeof el.getBoundingClientRect == 'function') ? el.getBoundingClientRect() : {
+      width: el.offsetWidth,
+      height: el.offsetHeight
+    }, this.$element.offset())
+  }
+
+  Tooltip.prototype.getCalculatedOffset = function (placement, pos, actualWidth, actualHeight) {
+    return placement == 'bottom' ? { top: pos.top + pos.height,   left: pos.left + pos.width / 2 - actualWidth / 2  } :
+           placement == 'top'    ? { top: pos.top - actualHeight, left: pos.left + pos.width / 2 - actualWidth / 2  } :
+           placement == 'left'   ? { top: pos.top + pos.height / 2 - actualHeight / 2, left: pos.left - actualWidth } :
+        /* placement == 'right' */ { top: pos.top + pos.height / 2 - actualHeight / 2, left: pos.left + pos.width   }
+  }
+
+  Tooltip.prototype.getTitle = function () {
+    var title
+    var $e = this.$element
+    var o  = this.options
+
+    title = $e.attr('data-original-title')
+      || (typeof o.title == 'function' ? o.title.call($e[0]) :  o.title)
+
+    return title
+  }
+
+  Tooltip.prototype.tip = function () {
+    return this.$tip = this.$tip || $(this.options.template)
+  }
+
+  Tooltip.prototype.arrow = function () {
+    return this.$arrow = this.$arrow || this.tip().find('.tooltip-arrow')
+  }
+
+  Tooltip.prototype.validate = function () {
+    if (!this.$element[0].parentNode) {
+      this.hide()
+      this.$element = null
+      this.options  = null
     }
+  }
 
-    // Decides how fast animation should be
-    var startTime   = 3000,
-        endTime     = 800,
-        bounds      = 0.2,
-        timeDelta   = startTime - endTime,
-        totalDur    = timeDelta/bounds,
-        leftTime    = totalDur*(left/width) + endTime,
-        rightTime   = totalDur - totalDur*(right/width) + endTime;
+  Tooltip.prototype.enable = function () {
+    this.enabled = true
+  }
 
-    // Timeline left/right animation
-    if (leftTime < startTime)
-        this.$scale._animate({ left:'+=500' }, {
-            duration: leftTime, easing: "linear", step: reRender.bind(this)
-        });
-    if (rightTime < startTime)
-        this.$scale._animate({ left:'-=500' }, {
-            duration: rightTime, easing: "linear", step: reRender.bind(this)
-        });
+  Tooltip.prototype.disable = function () {
+    this.enabled = false
+  }
 
-    // Checks if user is near timescale boundaries, re-renders if so:
-    function reRender(now, fx) {
-        var reloadBuff = this._visibleMarks/2,
-            intv    = this._interval,
-            scLeft      = now,
-            scRight     = this.$scale.width() + scLeft - this.$container.width(),
-            left        = ui.left,
-            right       = slWidth + left,
-            date        = ((left-scLeft+slWidth/2)/intv)*z + this._startYear,
-            leftTime    = totalDur*(left/width) + endTime,
-            rightTime   = totalDur - totalDur*(right/width) + endTime;
+  Tooltip.prototype.toggleEnabled = function () {
+    this.enabled = !this.enabled
+  }
 
-        if (this._isInFuture()) this.stop();
+  Tooltip.prototype.toggle = function (e) {
+    var self = e ? $(e.currentTarget)[this.type](this.getDelegateOptions()).data('bs.' + this.type) : this
+    self.tip().hasClass('in') ? self.leave(self) : self.enter(self)
+  }
 
-        if (left < 0.5 * width) fx.options.duration = leftTime;
-                           else fx.options.duration = rightTime;
+  Tooltip.prototype.destroy = function () {
+    clearTimeout(this.timeout)
+    this.hide().$element.off('.' + this.type).removeData('bs.' + this.type)
+  }
 
-        if (scLeft > (-intv * reloadBuff) || scRight < (intv * reloadBuff))
-            this.render(left, date, fx);
-    }
-};
 
-fn.stop = function(e,ui){
-    this.$scale.clearQueue()._stop();
-    this.trigger("change");
-};
+  // TOOLTIP PLUGIN DEFINITION
+  // =========================
 
-fn.moveToDate = function(e){
-    var x = e.clientX || e.x,
-        left   = x - this.$timeline.position().left,
-        width  = this.$slider.width(),
-        newPos = left - width/2,
-        self   = this;
+  var old = $.fn.tooltip
 
-    this.$slider.animate({ left: newPos }, 400, "swing", function(){
-        self.trigger("change");
-    });
-};
+  $.fn.tooltip = function (option) {
+    return this.each(function () {
+      var $this   = $(this)
+      var data    = $this.data('bs.tooltip')
+      var options = typeof option == 'object' && option
 
-fn.zoomIn = function(e, z) {
-    if (isNaN(z)) z = 1;
-    var lvl = this._zoom + z;
-    if (!zoomLevels[lvl]) return true;
-    Atlastory.time.set({ zoom: lvl });
-    this._zoom = lvl;
-    this.create("zoom");
-};
+      if (!data && option == 'destroy') return
+      if (!data) $this.data('bs.tooltip', (data = new Tooltip(this, options)))
+      if (typeof option == 'string') data[option]()
+    })
+  }
 
-fn.zoomOut = function(e, z){
-    if (isNaN(z)) z = -1;
-    var lvl = this._zoom + z;
-    if (!zoomLevels[lvl]) return true;
-    Atlastory.time.set({ zoom: lvl });
-    this._zoom = lvl;
-    this.create("zoom");
-};
+  $.fn.tooltip.Constructor = Tooltip
 
-fn.resize = function(data) {
-    var width, slideX;
 
-    width = (data && data.newSize) ? data.newSize.x : $(this._container).width();
-    slideX = (data && data.slide) ? data.slide : width/2 - this._interval/2; // Centers slider
+  // TOOLTIP NO CONFLICT
+  // ===================
 
-    this.$container.width(width);
-    this.$scale.width(this._visibleMarks * this._interval * 5);
-    this.$slider.css('left', slideX).dragUpdate({
-        //snap: [this._interval/(zoomLevels[this._zoom].scale * 12), 1],
-        xbounds: [-this._interval / 2, width + this._interval / 2]
-    });
+  $.fn.tooltip.noConflict = function () {
+    $.fn.tooltip = old
+    return this
+  }
 
-    this.trigger("resize");
-    this.render();
-};
+}(jQuery);
 
-module.exports = Timeline;
-
-},{"./Atlastory.Events":2,"./jQuery.finger":4,"./jQuery.plugins":5,"./time":9}],11:[function(require,module,exports){
-var Period = require('./period');
-
-module.exports = function(fn) {
-
-fn.initPeriods = function(timeline) {
-    this.$periods = $('<div class="time periods"/>');
-    this.$periods.appendTo(this.$scale);
-
-    Atlastory.on("period:add period:remove", this.renderPeriods, this);
-    this.on({
-        "render": this.renderPeriods,
-        "change": this.renderMap
-    }, this);
-};
-
-fn.renderPeriods = function() {
-    var per, p, left, right, lastColor;
-
-    lastColor = 0;
-
-    function pickColor() {
-        var colors = [
-            "atlastory-magenta",
-            "atlastory-orange",
-            "atlastory-yellow",
-            "atlastory-lime",
-            "atlastory-green"
-        ];
-        if (lastColor == colors.length - 1) lastColor = 0;
-        return colors[lastColor++];
-    }
-
-    // Creates period ribbons on timeline
-    var $ribbons = $('<div class="layer"/>');
-    for (p in Period.periods) {
-        per = Period.periods[p];
-        left = this._yearInPx(Period._dateToYear(per.start()));
-        right = this._yearInPx(Period._dateToYear(per.end()));
-        $('<div class="ribbon"/>').css("left", left)
-            .toggleClass("blue", !Atlastory._options.rainbow)
-            .toggleClass(pickColor(), Atlastory._options.rainbow)
-            .width(right - left).appendTo($ribbons);
-    }
-
-    this.$periods.empty().append($ribbons);
-
-    // Render map with current periods
-    this.renderMap();
-};
-
-fn.renderMap = function() {
-    var year = Atlastory.time.get(),
-        period = Period.getPeriodByYear(year);
-
-    if (period) {
-    // If there's a period, show it
-        if (period._preload) period.mapLayer.bringToFront();
-        else if (!Atlastory.layers.hasLayer(period.mapLayer)) {
-            Atlastory.layers.clearLayers()
-                .addLayer(period.mapLayer);
-        }
-    } else {
-    // If there aren't any periods, show only blank map
-        var blank = Atlastory._blankLayer;
-        if (period._preload) blank.bringToFront();
-        else if (!Atlastory.layers.hasLayer(blank)) Atlastory.layers.clearLayers()
-            .addLayer(blank);
-    }
-};
-
-};
-
-},{"./period":8}],12:[function(require,module,exports){
-module.exports = {
-    blankmap: "http://{s}.tiles.mapbox.com/v3/atlastory.map-6k2hhm7v/{z}/{x}/{y}.png",
-    base: "http://{s}.tiles.mapbox.com/v3",
-    name: "/atlastory.map-6k2hhm7v",
-    tile: "/{z}/{x}/{y}.",
-    format: "png",
-    url: function() {
-        return this.base + this.name + this.tile + this.format;
-    },
-    period: function(period) {
-        return this.url().replace('{p}', period);
-    }
-};
-
-},{}],13:[function(require,module,exports){
+},{}],17:[function(require,module,exports){
 (function(window) {
 	var HAS_HASHCHANGE = (function() {
 		var doc_mode = window.documentMode;
@@ -1894,7 +2658,7 @@ module.exports = {
 	};
 })(window);
 
-},{}],14:[function(require,module,exports){
+},{}],18:[function(require,module,exports){
 /*
  Leaflet, a JavaScript library for mobile-friendly interactive maps. http://leafletjs.com
  (c) 2010-2013, Vladimir Agafonkin
@@ -11064,10 +11828,10 @@ L.Map.include({
 
 
 }(window, document));
-},{}],15:[function(require,module,exports){
+},{}],19:[function(require,module,exports){
 module.exports={
   "name": "Atlastory.js",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Atlastory client-side API",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"

@@ -1,0 +1,196 @@
+//
+// Modals
+// --------------------------------------------------
+
+// .modal-open      - body class for killing the scroll
+// .modal           - container to scroll within
+// .modal-dialog    - positioning shell for the actual modal
+// .modal-content   - actual modal w/ bg and corners and shit
+
+@font-size-base:          14px;
+@font-size-large:         ceil((@font-size-base * 1.25)); // ~18px
+@font-size-small:         ceil((@font-size-base * 0.85)); // ~12px
+
+@border-radius-base:        4px;
+@border-radius-large:       6px;
+@border-radius-small:       3px;
+
+@zindex-modal-background:  1040;
+@zindex-modal:             1050;
+
+@modal-inner-padding:         15px;
+
+@modal-title-padding:         15px;
+@modal-title-line-height:     @line-height-base;
+
+@modal-content-bg:                             #fff;
+@modal-content-border-color:                   rgba(0,0,0,.2);
+@modal-content-fallback-border-color:          #999;
+
+@modal-backdrop-bg:           #000;
+@modal-backdrop-opacity:      50;
+@modal-header-border-color:   #e5e5e5;
+@modal-footer-border-color:   @modal-header-border-color;
+
+@modal-lg:                    900px;
+@modal-md:                    600px;
+@modal-sm:                    300px;
+
+@screen-sm:                  768px;
+@screen-sm-min:              @screen-sm;
+@screen-tablet:              @screen-sm-min;
+
+@screen-md:                  992px;
+@screen-md-min:              @screen-md;
+@screen-desktop:             @screen-md-min;
+
+// Kill the scroll on the body
+.modal-open {
+  overflow: hidden;
+}
+
+// Container that the modal scrolls within
+.modal {
+  display: none;
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: @zindex-modal;
+  -webkit-overflow-scrolling: touch;
+  color: @text-color;
+  font-family: @font-family-base;
+  font-size: @font-size-base;
+  line-height: @line-height-computed;
+
+  // Prevent Chrome on Windows from adding a focus outline. For details, see
+  // https://github.com/twbs/bootstrap/pull/10951.
+  outline: 0;
+
+  // When fading in the modal, animate it to slide down
+  &.fade .modal-dialog {
+    .translate(0, -25%);
+    .transition-transform(~"0.3s ease-out");
+  }
+  &.in .modal-dialog { .translate(0, 0)}
+}
+
+// Shell div to position the modal with bottom padding
+.modal-dialog {
+  position: relative;
+  width: auto;
+  margin: 10px;
+}
+
+// Actual modal
+.modal-content {
+  position: relative;
+  background-color: @modal-content-bg;
+  border: 1px solid @modal-content-fallback-border-color; //old browsers fallback (ie8 etc)
+  border: 1px solid @modal-content-border-color;
+  border-radius: @border-radius-large;
+  .box-shadow(0 3px 9px rgba(0,0,0,.5));
+  background-clip: padding-box;
+  // Remove focus outline from opened modal
+  outline: none;
+}
+
+// Modal background
+.modal-backdrop {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: @zindex-modal-background;
+  background-color: @modal-backdrop-bg;
+  // Fade for backdrop
+  &.fade { .opacity(0); }
+  &.in { .opacity(@modal-backdrop-opacity); }
+}
+
+// Modal header
+// Top section of the modal w/ title and dismiss
+.modal-header {
+  padding: @modal-title-padding;
+  border-bottom: 1px solid @modal-header-border-color;
+  min-height: (@modal-title-padding + @modal-title-line-height);
+}
+// Close icon
+.modal .close {
+  margin-top: -2px;
+}
+
+.close {
+  float: right;
+  font-size: 21px;
+  font-weight: 700;
+  line-height: 1;
+  color: #000;
+  text-shadow: 0 1px 0 #fff;
+  opacity: .2;
+  filter: alpha(opacity=20);
+}
+
+button.close {
+  padding: 0;
+  cursor: pointer;
+  background: 0 0;
+  border: 0;
+  -webkit-appearance: none;
+}
+
+// Title text within header
+.modal-title {
+  margin: 0;
+  line-height: @modal-title-line-height;
+}
+
+// Modal body
+// Where all modal content resides (sibling of .modal-header and .modal-footer)
+.modal-body {
+  position: relative;
+  padding: @modal-inner-padding;
+}
+
+// Footer (for actions)
+.modal-footer {
+  padding: @modal-inner-padding;
+  text-align: right; // right align buttons
+  border-top: 1px solid @modal-footer-border-color;
+  &:extend(.clearfix all); // clear it in case folks use .pull-* classes on buttons
+
+  // Properly space out buttons
+  .btn + .btn {
+    margin-left: 5px;
+    margin-bottom: 0; // account for input[type="submit"] which gets the bottom margin like all other inputs
+  }
+  // but override that for button groups
+  .btn-group .btn + .btn {
+    margin-left: -1px;
+  }
+  // and override it for block buttons as well
+  .btn-block + .btn-block {
+    margin-left: 0;
+  }
+}
+
+// Scale up the modal
+@media (min-width: @screen-sm-min) {
+  // Automatically set modal's width for larger viewports
+  .modal-dialog {
+    width: @modal-md;
+    margin: 80px auto 0px auto;
+  }
+  .modal-content {
+    .box-shadow(0 5px 15px rgba(0,0,0,.5));
+  }
+
+  // Modal sizes
+  .modal-sm { width: @modal-sm; }
+}
+
+@media (min-width: @screen-md-min) {
+  .modal-lg { width: @modal-lg; }
+}
