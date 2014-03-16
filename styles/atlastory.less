@@ -6,13 +6,12 @@
 @import (less) "../node_modules/leaflet/dist/leaflet.css";
 @import "timeline";
 
-.atlastory-map {
-  background: @gray-lighter;
+.atlastory-map,
+.modal {
   color: @text-color;
   font-family: @font-family-base;
   font-size: @font-size-base;
-  line-height: @line-height-computed;
-  overflow: hidden;
+  line-height: @line-height-base;
 
   a {
     color: @link-color;
@@ -22,6 +21,11 @@
       text-decoration: underline;
     }
   }
+}
+
+.atlastory-map {
+  background: @gray-lighter;
+  overflow: hidden;
 }
 
 #mapView {

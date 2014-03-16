@@ -60,17 +60,7 @@ var Logo = L.Control.extend({
     options: { position: 'bottomright' },
     onAdd: function(map) {
         var $logo = $('<div class="map-logo"/>');
-
-        var popoverOps = {
-                placement: 'top',
-                trigger: 'click',
-                container: '.atlastory-map',
-                html: true,
-                content: '<strong><a href="http://atlastory.com/">Atlastory</a> visualizes history on a map.</strong> This map is a demo, but our goal is the ability to explore an interactive map at any point in time. Help us by <a href="http://forum.atlastory.com/">joining the community</a>.'
-            };
-
         Atlastory._logo = $logo[0];
-
         return $logo[0];
     }
 });
@@ -133,14 +123,12 @@ var Modal = function(content) {
         '<div class="modal fade" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true">' +
             '<div class="modal-dialog">' +
                 '<div class="modal-content">' +
-                    '<div class="modal-body">' +
-                        '<button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>' +
-                    '</div>' +
+                    '<button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>' +
                 '</div>' +
             '</div>' +
         '</div>');
 
-    $('.modal-body', $modal).append(content);
+    $('.modal-content', $modal).append(content);
 
     $modal.modal({ show: false }).appendTo('body');
 
