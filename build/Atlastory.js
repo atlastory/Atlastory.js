@@ -83,13 +83,15 @@ var Map = function(id, time, options) {
         preload: false,
         timezoom: 2,
         rainbow: true,
-        detectRetina: false
+        detectRetina: false,
+        center: [20.72, -22.41],
+        zoom: 3
     }, options);
 
     // Create map & controls
     var map = Atlastory.map = new L.Map('mapView', {
-        zoom: 3,
-        center: [20.72, -22.41],
+        zoom: o.zoom,
+        center: o.center,
         zoomControl: false,
         inertia: true
     });
@@ -219,7 +221,7 @@ exports.periodLayer = function(period, options) {
     return new PeriodLayer(map, {
         p: period,
         attribution: config.attribution,
-        maxZoom: 9,
+        maxZoom: 6,
         reuseTiles: true,
         detectRetina: Atlastory._options.detectRetina
     });
