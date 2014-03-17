@@ -2,7 +2,7 @@
 require('./lib/vendor/leaflet');
 require('./lib/atlastory');
 
-},{"./lib/atlastory":2,"./lib/vendor/leaflet":16}],2:[function(require,module,exports){
+},{"./lib/atlastory":2,"./lib/vendor/leaflet":17}],2:[function(require,module,exports){
 // Hardcode image path
 window.L.Icon.Default.imagePath = 'http://img.atlastory.com/Atlastory.js/v1';
 
@@ -37,7 +37,7 @@ Atlastory.query = require('./query');
 module.exports = {
     blankmap: "http://{s}.tiles.mapbox.com/v3/atlastory.map-6k2hhm7v/{z}/{x}/{y}.png",
     base: "http://{s}.tiles.mapbox.com/v3",
-    name: "/atlastory.map-6k2hhm7v",
+    name: "/atlastory.{p}",
     tile: "/{z}/{x}/{y}.",
     format: "png",
     attribution: '&copy; <a href="http://forum.atlastory.com/">Atlastory contributors</a>',
@@ -117,7 +117,7 @@ var Map = function(id, time, options) {
 
 module.exports = Map;
 
-},{"./config":3,"./timeline":10,"./timeline.markers":11,"./timeline.periods":12,"./vendor/tooltip":18}],5:[function(require,module,exports){
+},{"./config":3,"./timeline":10,"./timeline.markers":11,"./timeline.periods":12,"./vendor/tooltip":19}],5:[function(require,module,exports){
 
 var Marker = function(data) {
     this.id = data.id || 0;
@@ -179,7 +179,7 @@ Modal.prototype.hide = function() {
 
 module.exports = Modal;
 
-},{"./vendor/modal":17}],7:[function(require,module,exports){
+},{"./vendor/modal":18}],7:[function(require,module,exports){
 var config = require('./config'),
     Time = require('./time');
 
@@ -658,7 +658,8 @@ fn.drag = function(e, ui) {
 
 fn.stop = function(e,ui){
     this.$scale.clearQueue()._stop();
-    this.trigger("change drag:stop");
+    this.trigger("change");
+    this.trigger("drag:stop");
 };
 
 fn.moveToDate = function(e){
@@ -1929,10 +1930,181 @@ module.exports = Avents;
 })(jQuery);
 
 },{}],16:[function(require,module,exports){
-window.L = require('leaflet/dist/leaflet-src');
-require('leaflet-hash/leaflet-hash');
+(function(window) {
+    var HAS_HASHCHANGE = (function() {
+        var doc_mode = window.documentMode;
+        return ('onhashchange' in window) &&
+            (doc_mode === undefined || doc_mode > 7);
+    })();
 
-},{"leaflet-hash/leaflet-hash":19,"leaflet/dist/leaflet-src":20}],17:[function(require,module,exports){
+    L.Hash = function(map) {
+        this.onHashChange = L.Util.bind(this.onHashChange, this);
+
+        if (map) {
+            this.init(map);
+        }
+    };
+
+    L.Hash.parseHash = function(hash) {
+        if(hash.indexOf('#') === 0) {
+            hash = hash.substr(1);
+        }
+        var args = hash.split("/");
+        if (args.length == 4) {
+            var year = parseFloat(args[0]),
+                zoom = parseInt(args[1], 10),
+                lat = parseFloat(args[2]),
+                lon = parseFloat(args[3]);
+            if (isNaN(year) || isNaN(zoom) || isNaN(lat) || isNaN(lon)) {
+                return false;
+            } else {
+                return {
+                    year: year,
+                    center: new L.LatLng(lat, lon),
+                    zoom: zoom
+                };
+            }
+        } else {
+            return false;
+        }
+    };
+
+    L.Hash.formatHash = function(map) {
+        var year = Atlastory.time.get(),
+            center = map.getCenter(),
+            zoom = map.getZoom(),
+            precision = Math.max(0, Math.ceil(Math.log(zoom) / Math.LN2));
+
+        return "#" + [year.toFixed(2),
+            zoom,
+            center.lat.toFixed(precision),
+            center.lng.toFixed(precision)
+        ].join("/");
+    },
+
+    L.Hash.prototype = {
+        map: null,
+        lastHash: null,
+
+        parseHash: L.Hash.parseHash,
+        formatHash: L.Hash.formatHash,
+
+        init: function(map) {
+            this.map = map;
+
+            // reset the hash
+            this.lastHash = null;
+            this.onHashChange();
+
+            if (!this.isListening) {
+                this.startListening();
+            }
+        },
+
+        removeFrom: function(map) {
+            if (this.changeTimeout) {
+                clearTimeout(this.changeTimeout);
+            }
+
+            if (this.isListening) {
+                this.stopListening();
+            }
+
+            this.map = null;
+        },
+
+        onMapMove: function() {
+            // bail if we're moving the map (updating from a hash),
+            // or if the map is not yet loaded
+
+            if (this.movingMap || !this.map._loaded) {
+                return false;
+            }
+
+            var hash = this.formatHash(this.map);
+            if (this.lastHash != hash) {
+                location.replace(hash);
+                this.lastHash = hash;
+            }
+        },
+
+        movingMap: false,
+        update: function() {
+            var hash = location.hash;
+            if (hash === this.lastHash) {
+                return;
+            }
+            var parsed = this.parseHash(hash);
+            if (parsed) {
+                this.movingMap = true;
+
+                this.map.setView(parsed.center, parsed.zoom);
+                this.movingMap = false;
+
+                Atlastory.time.set(parsed.year);
+            } else {
+                this.onMapMove(this.map);
+            }
+        },
+
+        // defer hash change updates every 100ms
+        changeDefer: 100,
+        changeTimeout: null,
+        onHashChange: function() {
+            // throttle calls to update() so that they only happen every
+            // `changeDefer` ms
+            if (!this.changeTimeout) {
+                var that = this;
+                this.changeTimeout = setTimeout(function() {
+                    that.update();
+                    that.changeTimeout = null;
+                }, this.changeDefer);
+            }
+        },
+
+        isListening: false,
+        hashChangeInterval: null,
+        startListening: function() {
+            this.map.on("moveend", this.onMapMove, this);
+            Atlastory.timeline.on("drag:stop", this.onMapMove, this);
+
+            if (HAS_HASHCHANGE) {
+                L.DomEvent.addListener(window, "hashchange", this.onHashChange);
+            } else {
+                clearInterval(this.hashChangeInterval);
+                this.hashChangeInterval = setInterval(this.onHashChange, 50);
+            }
+            this.isListening = true;
+        },
+
+        stopListening: function() {
+            this.map.off("moveend", this.onMapMove, this);
+            Atlastory.timeline.off("drag:stop", this.onMapMove, this);
+
+            if (HAS_HASHCHANGE) {
+                L.DomEvent.removeListener(window, "hashchange", this.onHashChange);
+            } else {
+                clearInterval(this.hashChangeInterval);
+            }
+            this.isListening = false;
+        }
+    };
+    L.hash = function(map) {
+        return new L.Hash(map);
+    };
+    L.Map.prototype.addHash = function() {
+        this._hash = L.hash(this);
+    };
+    L.Map.prototype.removeHash = function() {
+        this._hash.removeFrom();
+    };
+})(window);
+
+},{}],17:[function(require,module,exports){
+window.L = require('leaflet/dist/leaflet-src');
+require('./leaflet-hash');
+
+},{"./leaflet-hash":16,"leaflet/dist/leaflet-src":20}],18:[function(require,module,exports){
 /* ========================================================================
  * Bootstrap: modal.js v3.1.1
  * http://getbootstrap.com/javascript/#modals
@@ -2177,7 +2349,7 @@ require('leaflet-hash/leaflet-hash');
 
 }(jQuery);
 
-},{}],18:[function(require,module,exports){
+},{}],19:[function(require,module,exports){
 /* ========================================================================
  * Bootstrap: tooltip.js v3.1.1
  * http://getbootstrap.com/javascript/#tooltip
@@ -2577,170 +2749,6 @@ require('leaflet-hash/leaflet-hash');
   }
 
 }(jQuery);
-
-},{}],19:[function(require,module,exports){
-(function(window) {
-	var HAS_HASHCHANGE = (function() {
-		var doc_mode = window.documentMode;
-		return ('onhashchange' in window) &&
-			(doc_mode === undefined || doc_mode > 7);
-	})();
-
-	L.Hash = function(map) {
-		this.onHashChange = L.Util.bind(this.onHashChange, this);
-
-		if (map) {
-			this.init(map);
-		}
-	};
-
-	L.Hash.parseHash = function(hash) {
-		if(hash.indexOf('#') === 0) {
-			hash = hash.substr(1);
-		}
-		var args = hash.split("/");
-		if (args.length == 3) {
-			var zoom = parseInt(args[0], 10),
-			lat = parseFloat(args[1]),
-			lon = parseFloat(args[2]);
-			if (isNaN(zoom) || isNaN(lat) || isNaN(lon)) {
-				return false;
-			} else {
-				return {
-					center: new L.LatLng(lat, lon),
-					zoom: zoom
-				};
-			}
-		} else {
-			return false;
-		}
-	};
-
-	L.Hash.formatHash = function(map) {
-		var center = map.getCenter(),
-		    zoom = map.getZoom(),
-		    precision = Math.max(0, Math.ceil(Math.log(zoom) / Math.LN2));
-
-		return "#" + [zoom,
-			center.lat.toFixed(precision),
-			center.lng.toFixed(precision)
-		].join("/");
-	},
-
-	L.Hash.prototype = {
-		map: null,
-		lastHash: null,
-
-		parseHash: L.Hash.parseHash,
-		formatHash: L.Hash.formatHash,
-
-		init: function(map) {
-			this.map = map;
-
-			// reset the hash
-			this.lastHash = null;
-			this.onHashChange();
-
-			if (!this.isListening) {
-				this.startListening();
-			}
-		},
-
-		removeFrom: function(map) {
-			if (this.changeTimeout) {
-				clearTimeout(this.changeTimeout);
-			}
-
-			if (this.isListening) {
-				this.stopListening();
-			}
-
-			this.map = null;
-		},
-
-		onMapMove: function() {
-			// bail if we're moving the map (updating from a hash),
-			// or if the map is not yet loaded
-
-			if (this.movingMap || !this.map._loaded) {
-				return false;
-			}
-
-			var hash = this.formatHash(this.map);
-			if (this.lastHash != hash) {
-				location.replace(hash);
-				this.lastHash = hash;
-			}
-		},
-
-		movingMap: false,
-		update: function() {
-			var hash = location.hash;
-			if (hash === this.lastHash) {
-				return;
-			}
-			var parsed = this.parseHash(hash);
-			if (parsed) {
-				this.movingMap = true;
-
-				this.map.setView(parsed.center, parsed.zoom);
-
-				this.movingMap = false;
-			} else {
-				this.onMapMove(this.map);
-			}
-		},
-
-		// defer hash change updates every 100ms
-		changeDefer: 100,
-		changeTimeout: null,
-		onHashChange: function() {
-			// throttle calls to update() so that they only happen every
-			// `changeDefer` ms
-			if (!this.changeTimeout) {
-				var that = this;
-				this.changeTimeout = setTimeout(function() {
-					that.update();
-					that.changeTimeout = null;
-				}, this.changeDefer);
-			}
-		},
-
-		isListening: false,
-		hashChangeInterval: null,
-		startListening: function() {
-			this.map.on("moveend", this.onMapMove, this);
-
-			if (HAS_HASHCHANGE) {
-				L.DomEvent.addListener(window, "hashchange", this.onHashChange);
-			} else {
-				clearInterval(this.hashChangeInterval);
-				this.hashChangeInterval = setInterval(this.onHashChange, 50);
-			}
-			this.isListening = true;
-		},
-
-		stopListening: function() {
-			this.map.off("moveend", this.onMapMove, this);
-
-			if (HAS_HASHCHANGE) {
-				L.DomEvent.removeListener(window, "hashchange", this.onHashChange);
-			} else {
-				clearInterval(this.hashChangeInterval);
-			}
-			this.isListening = false;
-		}
-	};
-	L.hash = function(map) {
-		return new L.Hash(map);
-	};
-	L.Map.prototype.addHash = function() {
-		this._hash = L.hash(this);
-	};
-	L.Map.prototype.removeHash = function() {
-		this._hash.removeFrom();
-	};
-})(window);
 
 },{}],20:[function(require,module,exports){
 /*
@@ -11915,7 +11923,7 @@ L.Map.include({
 },{}],21:[function(require,module,exports){
 module.exports={
   "name": "Atlastory.js",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Atlastory client-side API",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -11924,8 +11932,7 @@ module.exports={
   "author": "Atlastory, Inc.",
   "main": "index.js",
   "dependencies": {
-    "leaflet": "0.7.2",
-    "leaflet-hash": "~0.2.1"
+    "leaflet": "0.7.2"
   },
   "devDependencies": {
     "gulp": "~3.4.0",
