@@ -1,59 +1,68 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Atlastory.js Tests</title>
-    <meta content="text/html;charset=UTF-8" http-equiv="content-type"/>
-    <link rel="stylesheet" href="../build/Atlastory.css" type="text/css" />
-    <style type="text/css">
-        html, body {
-            margin: 0; padding: 0;
-            width: 100%; height: 100%;
-        }
-        #map {
-            position: absolute;
-            top: 0; bottom: 0;
-            width: 100%;
-        }
-    </style>
+  <title>Atlastory.js Tests</title>
+  <meta content="text/html;charset=UTF-8" http-equiv="content-type"/>
+  <link rel="stylesheet" href="../build/Atlastory.css" type="text/css" />
+  <style type="text/css">
+    html, body {
+      margin: 0; padding: 0;
+      width: 100%; height: 100%;
+    }
+    #map {
+      position: absolute;
+      top: 0; bottom: 0;
+      width: 100%;
+    }
+  </style>
 </head>
 <body>
 
-    <div id="map"></div>
+  <div id="map"></div>
 
-    <script src="http://ajax.googleapis.com/ajax/libs/jquery/2.1.0/jquery.min.js"></script>
-    <script type="text/javascript" src="../build/Atlastory.js"></script>
-    <script type="text/template" id="modalTemplate">
-        Modal Content
-    </script>
-    <script type="text/javascript">
-        $(function() {
-            var $logo = $(Atlastory._logo),
-                content = $('#modalTemplate').html(),
-                modal = new Atlastory.Modal(content);
+  <script src="http://ajax.googleapis.com/ajax/libs/jquery/2.1.0/jquery.min.js"></script>
+  <script type="text/javascript" src="../build/Atlastory.js"></script>
+  <script type="text/template" id="modalTemplate">
+    Modal Content
+  </script>
+  <script type="text/javascript">
+    $(function() {
+      var $logo = $(Atlastory._logo),
+        content = $('#modalTemplate').html(),
+        modal = new Atlastory.Modal(content);
 
-            $logo.tooltip({
-                container: '.atlastory-map',
-                title: 'See more...'
-            }).click(function() { modal.show(); });
-        });
+      $logo.tooltip({
+        container: '.atlastory-map',
+        title: 'Find out more...'
+      }).click(function() { modal.show(); });
+    });
 
-        var periods = [
-            { id: 3, start_year: 1890, end_year: 1900 },
-            { id: 2, start_year: 1910, end_year: 1950 },
-            { id: 1, start_year: 1950, end_year: 2000 }
-        ];
+    var periods = [
+      { id: 3, start_year: 1890, end_year: 1900 },
+      { id: 2, start_year: 1910, end_year: 1950 },
+      { id: 1, start_year: 1950, end_year: 2000 }
+    ];
 
-        var map = Atlastory.map('map', 1956, {
-            preload: false,
-            timezoom: 2,
-            rainbow: true
-        });
+    var markers = [
+      { date: '1940-01-01', lat: 0, lon: 0, name: "test1",description: "content" },
+      { date: '1940-08-01', lat: 2, lon: 2, name: "test2",description: "content" },
+      { date: '1941-08-21', lat: 5, lon: 5, name: "test2",description: "content" }
+    ];
 
-        for (var p in periods) {
-            Atlastory.addPeriod(periods[p]);
-        }
+    var map = Atlastory.map('map', 1956, {
+      preload: false,
+      timezoom: 2,
+      rainbow: true
+    });
 
-        Atlastory.hash(map);
-    </script>
+    for (var p in periods) {
+      Atlastory.addPeriod(periods[p]);
+    }
+    for (var m in markers) {
+      Atlastory.addMarker(markers[m]);
+    }
+
+    Atlastory.hash(map);
+  </script>
 </body>
 </html>

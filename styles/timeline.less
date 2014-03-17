@@ -23,6 +23,11 @@
 @ribbon-height:   10px;
 @ribbon-top:      7px;
 
+@marker-top:      20px;
+@marker-size:     6px;
+@marker-color:    @white;
+@marker-border:   1px solid @gray-dark;
+
 .timeline {
   visibility: hidden;
   position: absolute;
@@ -92,6 +97,15 @@
     height: @ribbon-height;
     box-sizing: border-box;
     &.blue { background-color: fade(@ribbon-color, 20%); }
+  }
+  .marker {
+    position: absolute;
+    top: @marker-top;
+    width: @marker-size;
+    height: @marker-size;
+    .border-radius(@marker-size);
+    background-color: @marker-color;
+    border: @marker-border;
   }
 }
 
