@@ -226,8 +226,8 @@ exports.periodLayer = function(period, options) {
 };
 
 exports.addPeriod = function(period, options) {
-    if (!period.id || isNaN(parseFloat(period.id)))
-        return console.error("Atlastory#addPeriod: Period is missing an ID number.");
+    if (!period.id)
+        return console.error("Atlastory#addPeriod: Period is missing an ID.");
     if (!period.start_year || !period.end_year)
         return console.error("Atlastory#addPeriod: Period is missing start or end year.");
 
