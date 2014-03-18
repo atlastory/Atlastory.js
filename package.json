@@ -1,6 +1,6 @@
 {
   "name": "Atlastory.js",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "Atlastory client-side API",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
