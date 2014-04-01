@@ -87,7 +87,8 @@ var Map = function(id, time, options) {
         rainbow: true,
         detectRetina: true,
         center: [20.72, -22.41],
-        zoom: 3
+        zoom: 3,
+        maxZoom: 9
     }, options);
 
     // Create map & controls
@@ -95,7 +96,8 @@ var Map = function(id, time, options) {
         zoom: o.zoom,
         center: o.center,
         zoomControl: false,
-        inertia: true
+        inertia: true,
+        maxZoom: o.maxZoom
     });
 
     map.addControl(new Logo());
