@@ -21,9 +21,11 @@ Atlastory.Modal = require('./modal');
 Period = require('./period');
 Atlastory.periodLayer = Period.periodLayer;
 Atlastory.addPeriod = Period.addPeriod;
+Atlastory.addPeriods = Period.addPeriods;
 
 Markers = require('./marker');
 Atlastory.addMarker = Markers.addMarker;
+Atlastory.addMarkers = Markers.addMarkers;
 
 Atlastory.map = require('./map');
 Atlastory.query = require('./query');
@@ -130,6 +132,10 @@ var Marker = function(data) {
     this.name = data.name;
     this.description = data.description;
 
+    if (data.link && data.link !== '') this.description += '<br/>' +
+        '<a href="' + data.link + '" class="read-more" target="_blank">' +
+        'Read more &raquo;</a>';
+
     this.object = new L.Marker([this.lat, this.lon], {
         title: this.name
     });
@@ -147,6 +153,15 @@ exports.addMarker = function(marker, options) {
     Atlastory.trigger("marker:add", { marker: marker });
 };
 
+exports.addMarkers = function(markers) {
+    if (!Array.isArray(markers) && markers.lat) {
+        return exports.addMarker(markers);
+    } else if (Array.isArray(markers)) {
+        for (var m in markers) exports.addMarker(markers[m]);
+    } else {
+        console.error("#addMarkers must be given an array");
+    }
+};
 
 
 },{}],6:[function(require,module,exports){
@@ -238,6 +253,16 @@ exports.addPeriod = function(period, options) {
     period = new Period(period);
     exports.periods.push(period);
     Atlastory.trigger("period:add", { period: period });
+};
+
+exports.addPeriods = function(periods) {
+    if (!Array.isArray(periods) && periods.id) {
+        return exports.addPeriod(periods);
+    } else if (Array.isArray(periods)) {
+        for (var p in periods) exports.addPeriod(periods[p]);
+    } else {
+        console.error("#addPeriods must be given an array");
+    }
 };
 
 function isBefore(year, before) {
@@ -786,13 +811,11 @@ fn.renderPeriods = function() {
 
     function pickColor() {
         var colors = [
-            "atlastory-magenta",
-            "atlastory-orange",
-            "atlastory-yellow",
-            "atlastory-lime",
-            "atlastory-green"
+            "atlastory-magenta", "atlastory-orange", "atlastory-yellow",
+            "atlastory-lime", "atlastory-green", "atlastory-lime", "atlastory-yellow",
+            "atlastory-orange"
         ];
-        if (lastColor == colors.length - 1) lastColor = 0;
+        if (lastColor > colors.length - 1) lastColor = 0;
         return colors[lastColor++];
     }
 
@@ -11927,7 +11950,7 @@ L.Map.include({
 },{}],21:[function(require,module,exports){
 module.exports={
   "name": "Atlastory.js",
-  "version": "0.0.4",
+  "version": "0.0.6",
   "description": "Atlastory client-side API",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -11939,11 +11962,11 @@ module.exports={
     "leaflet": "0.7.2"
   },
   "devDependencies": {
-    "gulp": "~3.4.0",
+    "gulp": "~3.5.6",
     "gulp-uglify": "~0.2.1",
     "gulp-browserify": "~0.5.0",
     "gulp-rename": "~1.2.0",
-    "gulp-less": "1.2.1"
+    "gulp-less": "~1.2.3"
   }
 }
 
