@@ -34,22 +34,10 @@ gulp.task('styles', function() {
         .pipe(gulp.dest('build'));
 });
 
-// Hack to fix gulp.watch task bug:
-function doTask(names) {
-    return function(event) {
-        if (!Array.isArray(names)) names = [names];
-        console.log('"' + event.path + '" ' + event.type);
-        names.forEach(function(name) {
-            console.log("Running " + name);
-            gulp.tasks[name].fn();
-        });
-    };
-}
-
 gulp.task('watch', function() {
-    gulp.watch(['lib/*.js', 'lib/*/**.js', 'index.js'], doTask('browserify'));
-    gulp.watch('styles/*', doTask('styles'));
+    gulp.watch(['lib/*.js', 'lib/*/**.js', 'index.js'], ['browserify']);
+    gulp.watch('styles/*', ['styles']);
 });
 
-gulp.task('all', ['browserify', 'min', 'styles']);
+gulp.task('build', ['browserify', 'min', 'styles']);
 gulp.task('default', ['watch']);
