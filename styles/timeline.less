@@ -2,21 +2,19 @@
 // --------------------------------------------
 // TIMELINE
 
-@zindexTime:      1000;
+@z-index-time:      1000;
 
-@timeHeight:      55px;
-@timeRadius:      8px;
-@timeCapWidth:    30px;
-@timeTopGutter:   7px;
-@timeHandleWidth: 27px;
-@timeMargins:     0px;
+@time-height:     55px;
+@time-radius:     8px;
+@time-top-gutter: 7px;
+@time-margins:    0px;
 
 @time-bg:         @gray-darker;
 @time-color:      @gray-lighter;
 @time-opacity:    75%;
 @time-select:     darken(@time-bg, 20%);
-@timeBorders:     1px solid darken(@time-bg, 20%);
-@timeMarkBorder:  1px solid @time-color;
+@time-borders:    1px solid darken(@time-bg, 20%);
+@time-mark-color: 1px solid @time-color;
 @time-marker:     1px solid @time-select;
 
 @ribbon-color:    @blue;
@@ -31,25 +29,25 @@
 .timeline {
   visibility: hidden;
   position: absolute;
-  top: @timeMargins; left: @timeMargins;
+  top: @time-margins; lft: @time-margins;
   width: 100%;
   clear: both;
   cursor: auto;
-  z-index: @zindexTime;
+  z-index: @z-index-time;
   color: @time-color;
   .user-select(none);
 
   .box {
     position: relative;
-    height: @timeHeight;
-    border-bottom: @timeBorders;
+    height: @time-height;
+    border-bottom: @time-borders;
     #translucent > .background(@time-bg, @time-opacity);
     //.box-shadow-out(2px, 2px, 1px);
 
     .container {
       position: absolute;
       left: 0; top: 0;
-      height: @timeHeight;
+      height: @time-height;
       overflow-x: hidden;
       //overflow-y: visible;
     }
@@ -60,8 +58,8 @@
   position: absolute;
   left: 0px;
   top: 0px;
-  height: @timeHeight;
-  z-index: @zindexTime + 2;
+  height: @time-height;
+  z-index: @z-index-time + 2;
   overflow: hidden;
   .time {
     position: absolute;
@@ -76,8 +74,8 @@
   .label {
     position: absolute;
     bottom: 0px;
-    z-index: @zindexTime + 3;
-    border-left: @timeMarkBorder;
+    z-index: @z-index-time + 3;
+    border-left: @time-mark-color;
     font-size: 13px;
     line-height: 15px;
     padding-left: 3px;
@@ -86,9 +84,9 @@
   .major {
     position: absolute;
     bottom: 0px;
-    z-index: @zindexTime + 2;
-    height: @timeHeight;
-    border-left: @timeMarkBorder;
+    z-index: @z-index-time + 2;
+    height: @time-height;
+    border-left: @time-mark-color;
     .opacity(35);
   }
   .ribbon {
@@ -109,10 +107,47 @@
   }
 }
 
+.timeline .signifiers {
+  .arrow {
+    position: absolute;
+    top: 0;
+    z-index: @z-index-time + 10;
+    width: 5%; min-width: 20px;
+    height: @time-height;
+    background-color: transparent;
+    .opacity(0);
+    .transition(opacity linear 0.35s);
+
+    @height: 27px;
+    span {
+      position: absolute;
+      top: (@time-height - @height) / 2 - 3;
+      height: @height;
+      line-height: @height;
+      color: @gray-lighter;
+      font-size: @height;
+    }
+
+    @background: fade(@black, 80%);
+    &.left {
+      left: 0;
+      #gradient > .horizontal(@background, rgba(0,0,0,0));
+      span { left: 6px; }
+    }
+    &.right {
+      right: 0;
+      #gradient > .horizontal(rgba(0,0,0,0), @background);
+      span { right: 6px; }
+    }
+    &.show { .opacity(100); }
+  }
+}
+
 .timeline .slider {
   position: absolute;
-  top: -@timeTopGutter;
-  height: @timeHeight + @timeTopGutter * 3.5;
+  top: -@time-top-gutter;
+  z-index: @z-index-time + 20;
+  height: @time-height + @time-top-gutter * 3.5;
   cursor: col-resize;
   &.drag {
     .selection {
@@ -125,20 +160,20 @@
     position: absolute;
     left: -1px; top: 0px;
     width: 100%;
-    height: @timeTopGutter - 2;
+    height: @time-top-gutter - 2;
     border: 1px solid darken(@time-select,10%);
     #translucent > .background(@time-select,0.7);
-    .border-top-radius(@timeRadius);
+    .border-top-radius(@time-radius);
   }
   .label {
     position: absolute;
     left: -1px; bottom: 0px;
     width: 100%;
-    height: @timeTopGutter * 2.5 - 4;
-    z-index: @zindexTime + 5;
+    height: @time-top-gutter * 2.5 - 4;
+    z-index: @z-index-time + 5;
     border: 1px solid darken(@time-select,10%);
     #translucent > .background(@time-select,0.7);
-    .border-bottom-radius(@timeRadius);
+    .border-bottom-radius(@time-radius);
     padding-top: 2px;
     font-size: 10px;
     line-height: 1em;
@@ -148,10 +183,10 @@
   }
   .selection {
     position: absolute;
-    left: -1px; top: @timeTopGutter;
+    left: -1px; top: @time-top-gutter;
     width: 100%;
-    height: @timeHeight;
-    z-index: @zindexTime + 4;
+    height: @time-height;
+    z-index: @z-index-time + 4;
     border-left: 1px solid fade(@white, 25%);
     border-right: 1px solid fade(@black, 25%);
     #translucent > .background(@white, 20%);
@@ -160,7 +195,7 @@
       position: absolute;
       left: 50%; top: 0px;
       width: 0px;
-      height: @timeHeight;
+      height: @time-height;
       border-left: @time-marker;
     }
   }
