@@ -8,6 +8,7 @@
   "repository": "",
   "author": "Atlastory, Inc.",
   "main": "index.js",
+  "license": "MIT",
   "dependencies": {
     "leaflet": "0.7.2"
   },
